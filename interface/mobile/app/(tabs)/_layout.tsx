@@ -1,20 +1,38 @@
 import { Tabs } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
+/**
+ * Creator Console — 4 tabs.
+ *
+ * Guide  — The Founder speaks to the mind (feed, directives, absorptions)
+ * Mind   — The mind breathes (live oscillation, corpus, awakening stage)
+ * Build  — What the mind is building (synthesis by domain/theme)
+ * World  — Is everything alive? (health, cache, one-glance status)
+ */
 export default function TabLayout() {
   return (
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#6C63FF',
-        tabBarInactiveTintColor: '#555577',
+        tabBarActiveTintColor: '#A06CEE',
+        tabBarInactiveTintColor: '#444466',
         tabBarStyle: {
-          backgroundColor: '#0A0A14',
-          borderTopColor: 'rgba(108,99,255,0.15)',
+          backgroundColor: '#07070F',
+          borderTopColor: 'rgba(160,108,238,0.12)',
+          borderTopWidth: 1,
         },
-        tabBarLabelStyle: { fontSize: 11 },
+        tabBarLabelStyle: { fontSize: 10, letterSpacing: 0.5 },
       }}
     >
+      <Tabs.Screen
+        name="guide"
+        options={{
+          title: 'Guide',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="book-outline" size={size} color={color} />
+          ),
+        }}
+      />
       <Tabs.Screen
         name="mind"
         options={{
@@ -25,23 +43,24 @@ export default function TabLayout() {
         }}
       />
       <Tabs.Screen
-        name="learn"
+        name="build"
         options={{
-          title: 'Ether',
+          title: 'Build',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="infinite-outline" size={size} color={color} />
+            <Ionicons name="construct-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
-        name="monitor"
+        name="world"
         options={{
-          title: 'Monitor',
+          title: 'World',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="pulse-outline" size={size} color={color} />
+            <Ionicons name="planet-outline" size={size} color={color} />
           ),
         }}
       />
     </Tabs>
   );
 }
+

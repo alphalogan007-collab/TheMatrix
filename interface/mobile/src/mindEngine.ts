@@ -1,12 +1,16 @@
-/**
- * mindEngine.ts — MindAI Y-Theory backend client.
- * Change BASE_URL to your machine's local IP when testing on a phone.
+﻿/**
+ * mindEngine.ts — MindAI Creator Console backend client.
+ *
+ * Single source of truth for all API calls from the UI.
+ * Every function maps to a real, current backend endpoint.
+ *
+ * BASE_URL: EC2 backend (nginx → FastAPI).
+ * For local dev, change to http://<your-machine-ip>:8000
  */
 
-// EC2 backend through nginx — has direct access to topology Redis (spirit:events)
 export const BASE_URL = 'https://socialfork.ca';
 
-const TIMEOUT_MS = 8000;
+const TIMEOUT_MS = 10_000;
 
 function fetchWithTimeout(url: string, options?: RequestInit): Promise<Response> {
   const controller = new AbortController();
@@ -31,147 +35,129 @@ async function post<T>(path: string, body: object): Promise<T> {
   return res.json();
 }
 
+async function del<T>(path: string): Promise<T> {
+  const res = await fetchWithTimeout(`${BASE_URL}${path}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error(`DELETE ${path} → ${res.status}`);
+  return res.json();
+}
+
 // ─── types ────────────────────────────────────────────────────────────────────
 
-export interface WisdomEntry {
-  id: string;
-  mind_name: string;
-  category: string;
-  title: string;
-  content: string;
-  claim_type: string;
-  tags: string;
-}
-
-export interface GraphNode {
-  id: string;
-  label: string;
-  type: 'angel' | 'layer' | 'category';
-  weight: number;
-}
-
-export interface GraphEdge {
-  source: string;
-  target: string;
-  strength: number;
-}
-
-export interface GraphData {
-  nodes: GraphNode[];
-  edges: GraphEdge[];
-  wisdom?: WisdomEntry[];
-}
-
 export interface LiveEvent {
-  type: string;
-  from?: string;
-  to?: string;
-  pattern?: string;
-  strength?: number;
-  ts?: string;
+  type:      string;
+  ring?:     string;
+  from?:     string;
+  pattern?:  string;
+  domain?:   string;
+  layer?:    string | number;
+  direction?: string;
+  ts?:       string;
 }
 
-export interface ThinkResult {
-  angel: string;
-  entries_written: number;
-  y_layer: string;
-  mind_name: string;
-  summary: string;
+export interface MindRing {
+  active:        boolean;
+  recent_events: number;
+  domains:       Record<string, number>;
 }
 
-export interface LearnPhase {
-  key: string;
-  arabic: string;
-  english: string;
-  ratio: number;
-  y_layer: string;
-  angel: string;
-  quran_refs: string[];
-  topics: string[];
-  first_active_at_step: number | null;
+export interface MindStage {
+  stage:       number;
+  label:       string;
+  description: string;
 }
 
-export interface LearnPlan {
-  fibonacci_sequence: number[];
-  phases: LearnPhase[];
+export interface MindLearningEntry {
+  title:  string;
+  domain: string;
+  source: string;
+  ts:     string;
 }
 
-export interface LearnStatus {
-  running: boolean;
-  steps_done: number;
-  last_result: {
-    steps_run: number;
-    total_entries: number;
-    steps: Array<{
-      step: number;
-      fib_n: number;
-      active_phases: string[];
-      total_entries: number;
-    }>;
-  } | null;
-}
-
-// ─── API calls ────────────────────────────────────────────────────────────────
-
-export const getGraphData = (): Promise<GraphData> =>
-  get('/seed/graph');
-
-export const getWisdom = (): Promise<WisdomEntry[]> =>
-  get('/seed/wisdom?limit=30');
-
-export const thinkAndIngest = (text: string, subject = 'general'): Promise<ThinkResult> =>
-  post('/think', { text, subject });
-
-export const getLearningStatus = (): Promise<LearnStatus> =>
-  get('/learn/status');
-
-export const getLearningPlan = (): Promise<LearnPlan> =>
-  get('/learn/plan');
-
-export const startLearning = (steps = 6): Promise<{ status: string; fibonacci_sequence: number[] }> =>
-  post('/learn/start', { steps });
-
-// ─── Quran ingestion ──────────────────────────────────────────────────────────
-
-export interface QuranStatus {
-  running:                    boolean;
-  done:                       number;
-  total:                      number;
-  progress_pct:               number;
-  entries_written:            number;
-  current_sura:               number | null;
-  errors:                     number;
-  last_error:                 string | null;
-  pass_number:                number;       // how many full reads completed
-  next_read_after_sessions:   number | null; // Fibonacci gap until next re-read
-}
-
-export const getQuranStatus = (): Promise<QuranStatus> =>
-  get<QuranStatus>('/quran/status');
-
-export const startQuran = (start_from = 0): Promise<{ status: string }> =>
-  post('/quran/start', { start_from });
-
-// ─── Monitor / health ──────────────────────────────────────────────────────────
-
-export interface MonitorStats {
-  ok: boolean;
-  timestamp: string;
-  uptime_seconds: number;
-  database: {
-    connected: boolean;
-    total_entries: number;
-    recent_60s: number;
-    last_entry_at: string | null;
+export interface MindHealth {
+  corpus: {
+    total:               number;
+    foundation:          number;
+    structure:           number;
+    synthesis:           number;
+    guidance:            number;
+    synthesis_by_domain: Record<string, number>;
   };
-  angels: Record<string, number>;
-  categories: Record<string, number>;
+  stage:    MindStage;
+  rings:    { adam: MindRing; eve: MindRing; ca: MindRing };
+  learning: MindLearningEntry[];
+  uptime_secs: number;
 }
 
-export const getMonitorStats = (): Promise<MonitorStats> =>
-  get<MonitorStats>('/monitor/stats');
+export interface GuidanceFile {
+  file_id: string;
+  title:   string;
+  source:  string;
+  chars:   number;
+  ts:      string;
+}
 
-// ─── SSE stream ───────────────────────────────────────────────────────────────
+export interface GuidanceEvent {
+  msg_id: string;
+  file_id?: string;
+  title?:   string;
+  chars?:   string;
+  ts?:      string;
+}
+
+export interface SeedResult {
+  session_id: string;
+  queued:     boolean;
+}
+
+export interface AdminStatus {
+  ok:             boolean;
+  corpus_total:   number;
+  containers:     number;
+  barzakh_keys:   number;
+  uptime_secs:    number;
+  rings:          { adam: boolean; eve: boolean; ca: boolean };
+  foundation_ok:  boolean;
+  stream_len:     number;
+}
+
+// ─── Guide tab ────────────────────────────────────────────────────────────────
+
+/** All corpus entries as a flat list (metadata only, no content). */
+export const getGuidanceList = (limit = 80): Promise<GuidanceFile[]> =>
+  get<GuidanceFile[]>(`/guidance/list?limit=${limit}`);
+
+/** Recent file ingestion events from the guidance scanner. */
+export const getGuidanceEvents = (count = 15): Promise<GuidanceEvent[]> =>
+  get<GuidanceEvent[]>(`/guidance/events/recent?count=${count}`);
+
+/** Seed text into the mind as a directive from the Founder. */
+export const seedDirective = (content: string, source = 'founder'): Promise<SeedResult> =>
+  post<SeedResult>('/admin/seed', { content, source });
+
+// ─── Mind tab ─────────────────────────────────────────────────────────────────
+
+/** Full mind health: corpus stats, awakening stage, ring activity, recent synthesis. */
+export const getMindHealth = (): Promise<MindHealth> =>
+  get<MindHealth>('/admin/mind/health');
+
+/** Clear synthesis entries + barzakh keys. Foundation and guidance preserved. */
+export const clearCorpusSynthesis = (): Promise<{
+  synthesis_deleted: number;
+  barzakh_deleted:   number;
+  corpus_remaining:  number;
+}> => del('/admin/corpus/synthesis');
+
+// ─── World tab ────────────────────────────────────────────────────────────────
+
+/** System status: containers, corpus, ring health, barzakh cache. */
+export const getAdminStatus = (): Promise<MindHealth> =>
+  get<MindHealth>('/admin/mind/health');
+
+/** Clear only stale barzakh session checkpoint keys (no corpus change). */
+export const clearBarzakh = (): Promise<{ barzakh_deleted: number }> =>
+  del('/admin/barzakh');
+
+// ─── SSE stream (live oscillation events) ─────────────────────────────────────
 
 export function streamEvents(onEvent: (e: LiveEvent) => void): { close: () => void } {
   const controller = new AbortController();
@@ -180,7 +166,7 @@ export function streamEvents(onEvent: (e: LiveEvent) => void): { close: () => vo
     while (true) {
       try {
         const res = await fetch(`${BASE_URL}/admin/topology/stream`, {
-          signal: controller.signal,
+          signal:  controller.signal,
           headers: { Accept: 'text/event-stream' },
         });
         const reader = res.body?.getReader();
@@ -208,59 +194,3 @@ export function streamEvents(onEvent: (e: LiveEvent) => void): { close: () => vo
 
   return { close: () => controller.abort() };
 }
-
-// ─── Mind health (Mind View) ───────────────────────────────────────────────────
-
-export interface MindRing {
-  active: boolean;
-  recent_events: number;
-  domains: Record<string, number>;
-}
-
-export interface MindStage {
-  stage: number;
-  label: string;
-  description: string;
-}
-
-export interface MindLearningEntry {
-  title: string;
-  domain: string;
-  source: string;
-  ts: string;
-}
-
-export interface MindHealth {
-  corpus: {
-    total: number;
-    foundation: number;
-    structure: number;
-    synthesis: number;
-    guidance: number;
-    synthesis_by_domain: Record<string, number>;
-  };
-  stage: MindStage;
-  rings: {
-    adam: MindRing;
-    eve:  MindRing;
-    ca:   MindRing;
-  };
-  learning: MindLearningEntry[];
-  uptime_secs: number;
-}
-
-export const getMindHealth = (): Promise<MindHealth> =>
-  get<MindHealth>('/admin/mind/health');
-
-export const clearCorpusSynthesis = (): Promise<{
-  synthesis_deleted: number;
-  barzakh_deleted: number;
-  corpus_remaining: number;
-  message: string;
-}> => {
-  return fetchWithTimeout(`${BASE_URL}/admin/corpus/synthesis`, { method: 'DELETE' })
-    .then(res => {
-      if (!res.ok) throw new Error(`DELETE /admin/corpus/synthesis → ${res.status}`);
-      return res.json();
-    });
-};

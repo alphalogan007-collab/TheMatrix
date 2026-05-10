@@ -1,0 +1,5 @@
+FROM python:3.11-slim
+WORKDIR /master
+RUN pip install --no-cache-dir redis
+COPY master_guidance_service.py .
+CMD ["python", "-u", "master_guidance_service.py"]

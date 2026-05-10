@@ -52,6 +52,15 @@ INBOX      = Path(os.environ.get("GUIDANCE_INBOX",      "/guidance/inbox"))
 COMPLETED  = Path(os.environ.get("GUIDANCE_COMPLETED",  "/guidance/completed"))
 POLL_SECS  = float(os.environ.get("GUIDANCE_POLL_SECS", "5"))
 
+# GUIDANCE_SOURCES — comma-separated list of read-only source folders.
+# Files here are NEVER moved — they are permanent mounts (Y-Theory, Quran, etc.).
+# The dedup index (guidance:index) prevents double-ingestion across restarts.
+SOURCES: list[Path] = [
+    Path(s.strip())
+    for s in os.environ.get("GUIDANCE_SOURCES", "").split(",")
+    if s.strip()
+]
+
 SUPPORTED = {".pdf", ".txt", ".md", ".url", ".link", ".html"}
 
 logging.basicConfig(
@@ -267,6 +276,70 @@ async def _scan(redis: aioredis.Redis) -> None:
             log.error("Failed to consume %s: %s", path.name, e)
 
 
+# == Source folder scanner (read-only — never moves files) ==================
+
+async def _scan_sources(redis: aioredis.Redis) -> None:
+    """Scan GUIDANCE_SOURCES folders. Files are NEVER moved — permanent mounts.
+
+    These are the unchanging source documents:
+      - Y-Theory books (PDFs)
+      - Quran Tafseer (PDFs)
+      - DigitalWorld-Guidance (Code of Ethics, CEO letters)
+      - Root seed files (faith, soul, universe, etc.)
+
+    Dedup via guidance:index ensures each file is only ingested once,
+    even across container restarts.
+    """
+    for source_root in SOURCES:
+        if not source_root.exists():
+            log.warning("Source folder not found: %s", source_root)
+            continue
+
+        folder_label = source_root.name
+        all_files    = sorted(source_root.rglob("*"))
+
+        for path in all_files:
+            if not path.is_file():
+                continue
+            if path.name.startswith("."):
+                continue
+            if path.suffix.lower() not in SUPPORTED:
+                continue
+
+            # Stable dedup key: folder + name + size (mtime not used — mounts vary)
+            stat = path.stat()
+            fid  = hashlib.sha256(
+                f"source:{folder_label}:{path.name}:{stat.st_size}".encode()
+            ).hexdigest()[:32]
+
+            already = await redis.sismember("guidance:index", fid)
+            if already:
+                continue  # already ingested — skip silently
+
+            log.info("[source] Consuming: %s / %s", folder_label, path.name)
+            try:
+                title, content = await _extract(path)
+                content = content.strip()
+                if not content:
+                    log.warning("[source] No content: %s — skipping", path.name)
+                    # Mark as seen so we don't retry every cycle
+                    await redis.sadd("guidance:index", fid)
+                    continue
+
+                source_label = f"{folder_label}:{path.name}"
+                await _store(redis, title, content, source=source_label, file_id=fid)
+                log.info(
+                    "[source] Stored: '%s' (%d chars) [%s]",
+                    title[:60], len(content), source_label,
+                )
+
+                # Small delay between large files to avoid Redis flooding
+                await asyncio.sleep(0.1)
+
+            except Exception as e:
+                log.error("[source] Failed %s: %s", path.name, e)
+
+
 # == Main ====================================================================
 
 async def main() -> None:
@@ -274,6 +347,12 @@ async def main() -> None:
     log.info("Inbox:     %s", INBOX)
     log.info("Completed: %s", COMPLETED)
     log.info("Polling every %ss", POLL_SECS)
+    if SOURCES:
+        log.info("Source folders (%d):", len(SOURCES))
+        for s in SOURCES:
+            log.info("  %s", s)
+    else:
+        log.info("No GUIDANCE_SOURCES configured — inbox-only mode")
 
     redis = aioredis.from_url(REDIS_URL, decode_responses=True)
 
@@ -283,6 +362,14 @@ async def main() -> None:
             await _scan(redis)
         except Exception as e:
             log.error("Scan error: %s", e)
+
+        # Scan source folders every cycle (dedup prevents re-ingestion)
+        if SOURCES:
+            try:
+                await _scan_sources(redis)
+            except Exception as e:
+                log.error("Source scan error: %s", e)
+
         await asyncio.sleep(POLL_SECS)
 
 

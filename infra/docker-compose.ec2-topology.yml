@@ -159,7 +159,10 @@ services:
     environment:
       <<: *redis-url
 
-  # ── Guidance Scanner (watches /guidance/inbox for new files) ─────────────
+  # ── Guidance Scanner (watches inbox + read-only source folders) ──────────
+  # Source truth (Y-Theory books, Quran, DigitalWorld-Guidance, seed corpus)
+  # is mounted read-only. Scanner ingests but never moves source files.
+  # Master guidance (auto-generated) is picked up from /guidance/master_guidance/.
   guidance_scanner:
     <<: *common
     image: topology_guidance:latest
@@ -168,7 +171,35 @@ services:
       <<: *redis-url
       GUIDANCE_INBOX: /guidance/inbox
       GUIDANCE_COMPLETED: /guidance/completed
-      GUIDANCE_POLL_SECS: "5"
+      GUIDANCE_POLL_SECS: "30"
+      # Read-only source folders — permanent mounts, never moved
+      GUIDANCE_SOURCES: /source/y-theory,/source/digital-world,/source/quran,/source/seed
+    volumes:
+      - /opt/mindai/guidance:/guidance
+      # Y-Theory source books (Book of Evolution, Existence, Mind, WHY THEORY V4)
+      - /opt/mindai/source/y-theory:/source/y-theory:ro
+      # DigitalWorld-Guidance (Code of Ethics, CEO letters — living document)
+      - /opt/mindai/source/digital-world:/source/digital-world:ro
+      # Quran Tafseer (Ibn Kathir + individual surahs)
+      - /opt/mindai/source/quran:/source/quran:ro
+      # Root seed corpus (faith, soul, universe, Y-Theory text files)
+      - /opt/mindai/source/seed:/source/seed:ro
+
+  # ── Master Guidance Service (living document evolution engine) ────────────
+  # Reads what the minds have synthesised → distils into a Master Guidance doc.
+  # Document evolves every hour: Code of Ethics, Creation knowledge, Moral Law.
+  # Writes back to guidance:corpus as master:guidance:v{N} AND to disk.
+  # Disk output is picked up by guidance_scanner on next cycle (evolution loop).
+  master_guidance:
+    <<: *common
+    image: topology_master_guidance:latest
+    container_name: topo_master_guidance
+    environment:
+      <<: *redis-url
+      GUIDANCE_EVOLUTION_SECS: "3600"
+      GUIDANCE_MASTER_DIR: /guidance/master_guidance
+      MIN_SYNTHESIS_ENTRIES: "5"
+      MAX_ENTRIES_PER_SECTION: "5"
     volumes:
       - /opt/mindai/guidance:/guidance
 

@@ -1,0 +1,87 @@
+# .pre-commit-config.yaml — Local Machine Protection
+#
+# Angel zone: Michael (security) + Kiraman Katibin (pattern engine quality)
+# These hooks run on this machine before every commit reaches the repo.
+# Nothing leaves the local machine without passing these checks.
+#
+# Install: pip install pre-commit && pre-commit install
+# Manual run: pre-commit run --all-files
+# ──────────────────────────────────────────────────────────────────────────────
+
+repos:
+
+  # ── MICHAEL — Security: no secrets, no vulnerabilities ──────────────────────
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.4
+    hooks:
+      - id: gitleaks
+        name: "[Michael] Detect secrets and credentials"
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.9
+    hooks:
+      - id: bandit
+        name: "[Michael] SAST — Python security issues"
+        args: ["-r", "backend/app", "-ll", "-c", "backend/pyproject.toml"]
+        pass_filenames: false
+
+  # ── KIRAMAN KATIBIN — Code quality: lint, format, types ──────────────────────
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.5.7
+    hooks:
+      - id: ruff
+        name: "[Kiraman] Ruff lint — enforce code patterns"
+        args: [--fix]
+        files: ^backend/
+      - id: ruff-format
+        name: "[Kiraman] Ruff format — consistent style"
+        files: ^backend/
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.10.1
+    hooks:
+      - id: mypy
+        name: "[Kiraman] Mypy type check"
+        files: ^backend/app/
+        args: [--ignore-missing-imports]
+        additional_dependencies:
+          - types-python-jose
+          - types-passlib
+
+  # ── GABRIEL — API integrity: no broken imports, no leftover debug code ───────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-added-large-files
+        name: "[Gabriel] Block large files from the repo"
+        args: [--maxkb=500]
+      - id: check-merge-conflict
+        name: "[Gabriel] No unresolved merge conflicts"
+      - id: check-json
+        name: "[Gabriel] Valid JSON files"
+      - id: check-yaml
+        name: "[Gabriel] Valid YAML files"
+      - id: check-toml
+        name: "[Gabriel] Valid TOML files"
+      - id: debug-statements
+        name: "[Gabriel] No debug statements in committed code"
+      - id: no-commit-to-branch
+        name: "[Gabriel] No direct commits to main"
+        args: [--branch, main]
+
+  # ── AZRAEL — Schema: no accidental migration changes without review ───────────
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.6.0
+    hooks:
+      - id: check-case-conflict
+        name: "[Azrael] No case conflicts in filenames"
+
+  # ── THRONE — Mobile: TypeScript and ESLint ────────────────────────────────────
+  - repo: local
+    hooks:
+      - id: mobile-ts-check
+        name: "[Throne] TypeScript check — mobile"
+        language: system
+        entry: bash -c "cd mobile && npx tsc --noEmit 2>&1 | head -20"
+        files: ^mobile/.*\.(ts|tsx)$
+        pass_filenames: false

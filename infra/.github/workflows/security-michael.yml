@@ -1,0 +1,130 @@
+name: Michael — Security Guardian
+
+# Michael runs on every PR and on a daily schedule.
+# He never sleeps. He scans for threats at every push to main/develop
+# and does a full deep scan nightly.
+#
+# Angel zone: security/, dependencies.py, routes_auth.py, security_headers.py
+# Owner: Michael — The Protector
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  schedule:
+    # Deep scan every night at 02:00 UTC
+    - cron: "0 2 * * *"
+
+jobs:
+  # ── Static Application Security Testing (SAST) ──────────────────────────────
+  sast:
+    name: Michael — SAST Scan (Bandit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install bandit[toml]
+
+      - name: Bandit SAST — all severity levels
+        run: bandit -r app -c pyproject.toml -f json -o bandit-report.json || true
+
+      - name: Upload Bandit report
+        uses: actions/upload-artifact@v4
+        with:
+          name: bandit-sast-report
+          path: backend/bandit-report.json
+
+  # ── Dependency vulnerability scan ────────────────────────────────────────────
+  dependency-audit:
+    name: Michael — Dependency Vulnerabilities (pip-audit)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: pip-audit — dependency CVE scan
+        run: pip-audit --requirement <(pip install ".[dev]" --dry-run 2>/dev/null | grep -oP '\S+==\S+') || pip-audit
+
+  # ── Secret detection ─────────────────────────────────────────────────────────
+  secrets:
+    name: Michael — Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Gitleaks — detect secrets in full history
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ── OWASP dependency check ────────────────────────────────────────────────────
+  owasp:
+    name: Michael — OWASP Dependency Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: OWASP Dependency Check
+        uses: dependency-check/Dependency-Check_Action@main
+        with:
+          project: "MindAI"
+          path: "backend"
+          format: "HTML"
+          out: "reports"
+          args: >
+            --failOnCVSS 7
+            --enableRetired
+
+      - name: Upload OWASP report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: owasp-dependency-report
+          path: reports/
+
+  # ── Container image scan ──────────────────────────────────────────────────────
+  container-scan:
+    name: Michael — Container Image Scan (Trivy)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image for scanning
+        run: docker build -t mindai-backend:scan ./backend
+
+      - name: Trivy container scan
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: "mindai-backend:scan"
+          format: "sarif"
+          output: "trivy-results.sarif"
+          severity: "CRITICAL,HIGH"
+          exit-code: "1"
+
+      - name: Upload Trivy SARIF
+        uses: github/codeql-action/upload-sarif@v3
+        if: always()
+        with:
+          sarif_file: "trivy-results.sarif"

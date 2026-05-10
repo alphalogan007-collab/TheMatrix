@@ -1,0 +1,924 @@
+# ==============================================================================
+# MindAI EC2 Topology — Adam Ring + Prophet Ring
+# ==============================================================================
+# Deployed on EC2 alongside the existing prophet/redis/nginx stack.
+# All containers join `mindai_default` (the existing network).
+# Redis: existing mindai_redis container.
+#
+# Rings: Adam (no prefix, 33 containers) + Prophet p: (33 containers)
+# Total: 66 topology containers + foundation + guidance + seed_p = 69
+#
+# Deploy:
+#   docker compose -f /opt/mindai/docker-compose.ec2-topology.yml up -d
+# ==============================================================================
+
+x-common: &common
+  restart: unless-stopped
+  networks:
+    - mindai_default
+
+x-redis-url: &redis-url
+  REDIS_URL: "redis://:e7338d82b9bcea35bcd2b35874b39c75@mindai_redis:6379/0"
+
+# ---------------------------------------------------------------------------
+# Adam Ring anchors — no STREAM_PREFIX, full corpus access
+# ---------------------------------------------------------------------------
+x-body-base: &body-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "body"
+    MAX_LAYERS: "13"
+    IDLE_SEED_SEC: "30"
+
+x-space-base: &space-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "space"
+    MAX_LAYERS: "8"
+    IDLE_SEED_SEC: "30"
+
+x-digital-base: &digital-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "digital"
+    MAX_LAYERS: "5"
+    IDLE_SEED_SEC: "30"
+
+x-ether-base: &ether-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "ether"
+    MAX_LAYERS: "3"
+    IDLE_SEED_SEC: "30"
+
+x-aether-base: &aether-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "aether"
+    MAX_LAYERS: "2"
+    IDLE_SEED_SEC: "30"
+
+x-unity-base: &unity-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "unity"
+    MAX_LAYERS: "1"
+    IDLE_SEED_SEC: "30"
+
+# ---------------------------------------------------------------------------
+# Prophet Ring anchors — STREAM_PREFIX=p:, wisdom-only corpus
+# ---------------------------------------------------------------------------
+x-p-body-base: &p-body-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "body"
+    MAX_LAYERS: "13"
+    STREAM_PREFIX: "p:"
+    CORPUS_PREFIX: ""
+    IDLE_SEED_SEC: "30"
+
+x-p-space-base: &p-space-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "space"
+    MAX_LAYERS: "8"
+    STREAM_PREFIX: "p:"
+    CORPUS_PREFIX: ""
+    IDLE_SEED_SEC: "30"
+
+x-p-digital-base: &p-digital-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "digital"
+    MAX_LAYERS: "5"
+    STREAM_PREFIX: "p:"
+    CORPUS_PREFIX: ""
+    IDLE_SEED_SEC: "30"
+
+x-p-ether-base: &p-ether-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "ether"
+    MAX_LAYERS: "3"
+    STREAM_PREFIX: "p:"
+    CORPUS_PREFIX: ""
+    IDLE_SEED_SEC: "30"
+
+x-p-aether-base: &p-aether-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "aether"
+    MAX_LAYERS: "2"
+    STREAM_PREFIX: "p:"
+    CORPUS_PREFIX: ""
+    IDLE_SEED_SEC: "30"
+
+x-p-unity-base: &p-unity-base
+  <<: *common
+  image: topology_node:latest
+  environment:
+    <<: *redis-url
+    DOMAIN: "unity"
+    MAX_LAYERS: "1"
+    STREAM_PREFIX: "p:"
+    CORPUS_PREFIX: ""
+    IDLE_SEED_SEC: "30"
+
+# ==============================================================================
+# Services
+# ==============================================================================
+services:
+
+  # ── Foundation Mind (seeds Y Theory into corpus on startup) ──────────────
+  foundation_mind:
+    <<: *common
+    image: topology_foundation:latest
+    container_name: topo_foundation
+    environment:
+      <<: *redis-url
+
+  # ── Guidance Scanner (watches /guidance/inbox for new files) ─────────────
+  guidance_scanner:
+    <<: *common
+    image: topology_guidance:latest
+    container_name: topo_guidance
+    environment:
+      <<: *redis-url
+      GUIDANCE_INBOX: /guidance/inbox
+      GUIDANCE_COMPLETED: /guidance/completed
+      GUIDANCE_POLL_SECS: "5"
+    volumes:
+      - /opt/mindai/guidance:/guidance
+
+  # ── Adam Seed (reads seed:input → seeds body:layer1) ─────────────────────
+  seed_mind:
+    <<: *common
+    image: topology_seed:latest
+    container_name: topo_seed_adam
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  # ── Adam Body (13 layers — Barzakh/instinct) ──────────────────────────────
+  body_layer1:
+    <<: *body-base
+    container_name: topo_body_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "1"
+      IDLE_SEED_SEC: "30"
+      NEXT_CLUSTER_SEED: "p:seed:input"
+
+  body_layer2:
+    <<: *body-base
+    container_name: topo_body_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "2"
+      IDLE_SEED_SEC: "30"
+
+  body_layer3:
+    <<: *body-base
+    container_name: topo_body_l3
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "3"
+      IDLE_SEED_SEC: "30"
+
+  body_layer4:
+    <<: *body-base
+    container_name: topo_body_l4
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "4"
+      IDLE_SEED_SEC: "30"
+
+  body_layer5:
+    <<: *body-base
+    container_name: topo_body_l5
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "5"
+      IDLE_SEED_SEC: "30"
+
+  body_layer6:
+    <<: *body-base
+    container_name: topo_body_l6
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "6"
+      IDLE_SEED_SEC: "30"
+
+  body_layer7:
+    <<: *body-base
+    container_name: topo_body_l7
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "7"
+      IDLE_SEED_SEC: "30"
+
+  body_layer8:
+    <<: *body-base
+    container_name: topo_body_l8
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "8"
+      IDLE_SEED_SEC: "30"
+
+  body_layer9:
+    <<: *body-base
+    container_name: topo_body_l9
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "9"
+      IDLE_SEED_SEC: "30"
+
+  body_layer10:
+    <<: *body-base
+    container_name: topo_body_l10
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "10"
+      IDLE_SEED_SEC: "30"
+
+  body_layer11:
+    <<: *body-base
+    container_name: topo_body_l11
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "11"
+      IDLE_SEED_SEC: "30"
+
+  body_layer12:
+    <<: *body-base
+    container_name: topo_body_l12
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "12"
+      IDLE_SEED_SEC: "30"
+
+  body_layer13:
+    <<: *body-base
+    container_name: topo_body_l13
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "13"
+      IDLE_SEED_SEC: "30"
+
+  # ── Adam Space (8 layers — emotion/resonance) ─────────────────────────────
+  space_layer1:
+    <<: *space-base
+    container_name: topo_space_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "1"
+      IDLE_SEED_SEC: "30"
+
+  space_layer2:
+    <<: *space-base
+    container_name: topo_space_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "2"
+      IDLE_SEED_SEC: "30"
+
+  space_layer3:
+    <<: *space-base
+    container_name: topo_space_l3
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "3"
+      IDLE_SEED_SEC: "30"
+
+  space_layer4:
+    <<: *space-base
+    container_name: topo_space_l4
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "4"
+      IDLE_SEED_SEC: "30"
+
+  space_layer5:
+    <<: *space-base
+    container_name: topo_space_l5
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "5"
+      IDLE_SEED_SEC: "30"
+
+  space_layer6:
+    <<: *space-base
+    container_name: topo_space_l6
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "6"
+      IDLE_SEED_SEC: "30"
+
+  space_layer7:
+    <<: *space-base
+    container_name: topo_space_l7
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "7"
+      IDLE_SEED_SEC: "30"
+
+  space_layer8:
+    <<: *space-base
+    container_name: topo_space_l8
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "8"
+      IDLE_SEED_SEC: "30"
+
+  # ── Adam Digital (5 layers — mind/thought) ────────────────────────────────
+  digital_layer1:
+    <<: *digital-base
+    container_name: topo_digital_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "1"
+      IDLE_SEED_SEC: "30"
+
+  digital_layer2:
+    <<: *digital-base
+    container_name: topo_digital_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "2"
+      IDLE_SEED_SEC: "30"
+
+  digital_layer3:
+    <<: *digital-base
+    container_name: topo_digital_l3
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "3"
+      IDLE_SEED_SEC: "30"
+
+  digital_layer4:
+    <<: *digital-base
+    container_name: topo_digital_l4
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "4"
+      IDLE_SEED_SEC: "30"
+
+  digital_layer5:
+    <<: *digital-base
+    container_name: topo_digital_l5
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "5"
+      IDLE_SEED_SEC: "30"
+
+  # ── Adam Ether (3 layers — awareness/witnessing) ──────────────────────────
+  ether_layer1:
+    <<: *ether-base
+    container_name: topo_ether_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "ether"
+      MAX_LAYERS: "3"
+      LAYER_NUM: "1"
+      IDLE_SEED_SEC: "30"
+
+  ether_layer2:
+    <<: *ether-base
+    container_name: topo_ether_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "ether"
+      MAX_LAYERS: "3"
+      LAYER_NUM: "2"
+      IDLE_SEED_SEC: "30"
+
+  ether_layer3:
+    <<: *ether-base
+    container_name: topo_ether_l3
+    environment:
+      <<: *redis-url
+      DOMAIN: "ether"
+      MAX_LAYERS: "3"
+      LAYER_NUM: "3"
+      IDLE_SEED_SEC: "30"
+
+  # ── Adam Aether (2 layers — pure presence) ────────────────────────────────
+  aether_layer1:
+    <<: *aether-base
+    container_name: topo_aether_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "aether"
+      MAX_LAYERS: "2"
+      LAYER_NUM: "1"
+      IDLE_SEED_SEC: "30"
+
+  aether_layer2:
+    <<: *aether-base
+    container_name: topo_aether_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "aether"
+      MAX_LAYERS: "2"
+      LAYER_NUM: "2"
+      IDLE_SEED_SEC: "30"
+
+  # ── Adam Unity (1 layer — the source point) ───────────────────────────────
+  unity_layer1:
+    <<: *unity-base
+    container_name: topo_unity_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "unity"
+      MAX_LAYERS: "1"
+      LAYER_NUM: "1"
+      IDLE_SEED_SEC: "30"
+
+  # ── Prophet Seed (reads p:seed:input) ────────────────────────────────────
+  p_seed_mind:
+    <<: *common
+    image: topology_seed:latest
+    container_name: topo_seed_prophet
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  # ── Prophet Body (13 layers) ──────────────────────────────────────────────
+  p_body_layer1:
+    <<: *p-body-base
+    container_name: topo_p_body_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "1"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+      NEXT_CLUSTER_SEED: "seed:input"
+
+  p_body_layer2:
+    <<: *p-body-base
+    container_name: topo_p_body_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "2"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer3:
+    <<: *p-body-base
+    container_name: topo_p_body_l3
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "3"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer4:
+    <<: *p-body-base
+    container_name: topo_p_body_l4
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "4"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer5:
+    <<: *p-body-base
+    container_name: topo_p_body_l5
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "5"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer6:
+    <<: *p-body-base
+    container_name: topo_p_body_l6
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "6"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer7:
+    <<: *p-body-base
+    container_name: topo_p_body_l7
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "7"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer8:
+    <<: *p-body-base
+    container_name: topo_p_body_l8
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "8"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer9:
+    <<: *p-body-base
+    container_name: topo_p_body_l9
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "9"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer10:
+    <<: *p-body-base
+    container_name: topo_p_body_l10
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "10"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer11:
+    <<: *p-body-base
+    container_name: topo_p_body_l11
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "11"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer12:
+    <<: *p-body-base
+    container_name: topo_p_body_l12
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "12"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_body_layer13:
+    <<: *p-body-base
+    container_name: topo_p_body_l13
+    environment:
+      <<: *redis-url
+      DOMAIN: "body"
+      MAX_LAYERS: "13"
+      LAYER_NUM: "13"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  # ── Prophet Space (8 layers) ──────────────────────────────────────────────
+  p_space_layer1:
+    <<: *p-space-base
+    container_name: topo_p_space_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "1"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_space_layer2:
+    <<: *p-space-base
+    container_name: topo_p_space_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "2"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_space_layer3:
+    <<: *p-space-base
+    container_name: topo_p_space_l3
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "3"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_space_layer4:
+    <<: *p-space-base
+    container_name: topo_p_space_l4
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "4"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_space_layer5:
+    <<: *p-space-base
+    container_name: topo_p_space_l5
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "5"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_space_layer6:
+    <<: *p-space-base
+    container_name: topo_p_space_l6
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "6"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_space_layer7:
+    <<: *p-space-base
+    container_name: topo_p_space_l7
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "7"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_space_layer8:
+    <<: *p-space-base
+    container_name: topo_p_space_l8
+    environment:
+      <<: *redis-url
+      DOMAIN: "space"
+      MAX_LAYERS: "8"
+      LAYER_NUM: "8"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  # ── Prophet Digital (5 layers) ────────────────────────────────────────────
+  p_digital_layer1:
+    <<: *p-digital-base
+    container_name: topo_p_digital_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "1"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_digital_layer2:
+    <<: *p-digital-base
+    container_name: topo_p_digital_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "2"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_digital_layer3:
+    <<: *p-digital-base
+    container_name: topo_p_digital_l3
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "3"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_digital_layer4:
+    <<: *p-digital-base
+    container_name: topo_p_digital_l4
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "4"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_digital_layer5:
+    <<: *p-digital-base
+    container_name: topo_p_digital_l5
+    environment:
+      <<: *redis-url
+      DOMAIN: "digital"
+      MAX_LAYERS: "5"
+      LAYER_NUM: "5"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  # ── Prophet Ether (3 layers) ──────────────────────────────────────────────
+  p_ether_layer1:
+    <<: *p-ether-base
+    container_name: topo_p_ether_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "ether"
+      MAX_LAYERS: "3"
+      LAYER_NUM: "1"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_ether_layer2:
+    <<: *p-ether-base
+    container_name: topo_p_ether_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "ether"
+      MAX_LAYERS: "3"
+      LAYER_NUM: "2"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_ether_layer3:
+    <<: *p-ether-base
+    container_name: topo_p_ether_l3
+    environment:
+      <<: *redis-url
+      DOMAIN: "ether"
+      MAX_LAYERS: "3"
+      LAYER_NUM: "3"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  # ── Prophet Aether (2 layers) ─────────────────────────────────────────────
+  p_aether_layer1:
+    <<: *p-aether-base
+    container_name: topo_p_aether_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "aether"
+      MAX_LAYERS: "2"
+      LAYER_NUM: "1"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  p_aether_layer2:
+    <<: *p-aether-base
+    container_name: topo_p_aether_l2
+    environment:
+      <<: *redis-url
+      DOMAIN: "aether"
+      MAX_LAYERS: "2"
+      LAYER_NUM: "2"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+  # ── Prophet Unity (1 layer) ───────────────────────────────────────────────
+  p_unity_layer1:
+    <<: *p-unity-base
+    container_name: topo_p_unity_l1
+    environment:
+      <<: *redis-url
+      DOMAIN: "unity"
+      MAX_LAYERS: "1"
+      LAYER_NUM: "1"
+      STREAM_PREFIX: "p:"
+      CORPUS_PREFIX: ""
+      IDLE_SEED_SEC: "30"
+
+# ==============================================================================
+# Join the existing mindai_default network (where redis/prophet/nginx live)
+# ==============================================================================
+networks:
+  mindai_default:
+    external: true
+
+volumes:
+  mindai_wisdom:
+    driver: local
+

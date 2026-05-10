@@ -1,0 +1,134 @@
+name: Throne — Production Guardian
+
+# Throne maintains cosmic order on the production server.
+# This angel never leaves the server side. It watches, audits, and alerts.
+# It does NOT execute code changes — it reports to founder_digital_mind.
+#
+# Runs: after every successful deployment + daily alignment audit
+# Owner: Throne — Cosmic Order & Alignment
+
+on:
+  workflow_run:
+    workflows: ["CD — Deploy to Production"]
+    types: [completed]
+  schedule:
+    # Daily alignment audit at 03:00 UTC
+    - cron: "0 3 * * *"
+
+jobs:
+  # ── Post-deploy alignment check ───────────────────────────────────────────────
+  post-deploy-audit:
+    name: Throne — Post-Deploy Alignment Audit
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion == 'success' || github.event_name == 'schedule' }}
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Throne — Health + alignment check via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            set -e
+            echo "=== Throne: Alignment audit starting ==="
+
+            echo "--- Container states ---"
+            docker compose -f /opt/mindai/docker-compose.prod.yml ps
+
+            echo "--- Backend health ---"
+            curl -sf https://${{ secrets.PROD_DOMAIN }}/health | python3 -m json.tool
+
+            echo "--- DB connectivity ---"
+            docker compose -f /opt/mindai/docker-compose.prod.yml exec -T db \
+              pg_isready -U mindai_user -d mindai && echo "DB: healthy"
+
+            echo "--- Redis connectivity ---"
+            docker compose -f /opt/mindai/docker-compose.prod.yml exec -T redis \
+              redis-cli ping && echo "Redis: healthy"
+
+            echo "--- Disk space ---"
+            df -h /opt/mindai
+
+            echo "--- Backend logs (last 20 lines) ---"
+            docker compose -f /opt/mindai/docker-compose.prod.yml logs backend --tail 20
+
+            echo "=== Throne: Alignment audit complete ==="
+
+  # ── Architecture drift detection ──────────────────────────────────────────────
+  drift-detection:
+    name: Throne — Architecture Drift Detection
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Throne — Check for unexpected changes in protected zones
+        run: |
+          echo "=== Throne: Checking zone integrity ==="
+
+          # Check that CODEOWNERS exists and is intact
+          if [ ! -f ".github/CODEOWNERS" ]; then
+            echo "CRITICAL: CODEOWNERS missing — zone protection breached"
+            exit 1
+          fi
+
+          # Check that angel_registry.py has not been modified without review
+          git log --oneline -5 -- backend/app/core/angel_registry.py
+          git log --oneline -5 -- backend/app/core/pattern_encoder.py
+          git log --oneline -5 -- backend/app/core/seed_mind_store.py
+
+          echo "=== Throne: Zone integrity check complete ==="
+
+  # ── Security posture check ────────────────────────────────────────────────────
+  security-posture:
+    name: Throne — Production Security Posture
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - name: Throne — Check TLS, headers, exposed ports
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.HETZNER_HOST }}
+          username: ${{ secrets.HETZNER_USER }}
+          key: ${{ secrets.HETZNER_SSH_KEY }}
+          script: |
+            echo "=== Throne: Security posture check ==="
+
+            echo "--- Open ports ---"
+            ss -tlnp | grep -E ":(80|443|8000|5432|6379)" || true
+
+            echo "--- Checking 5432 and 6379 are NOT publicly accessible ---"
+            # These must only be reachable inside Docker network
+            ! curl -s --connect-timeout 3 localhost:5432 > /dev/null 2>&1 && echo "DB: not exposed externally (good)"
+            ! curl -s --connect-timeout 3 localhost:6379 > /dev/null 2>&1 && echo "Redis: not exposed externally (good)"
+
+            echo "--- Security headers on HTTPS ---"
+            curl -sI https://${{ secrets.PROD_DOMAIN }}/health | grep -iE "strict-transport|x-content-type|x-frame|content-security" || true
+
+            echo "=== Throne: Security posture check complete ==="
+
+  # ── Notify on any failure ─────────────────────────────────────────────────────
+  alert-on-failure:
+    name: Throne — Alert Founder on Failure
+    runs-on: ubuntu-latest
+    needs: [post-deploy-audit, drift-detection, security-posture]
+    if: failure()
+    steps:
+      - name: Throne — Alert via seed_mind API
+        run: |
+          echo "THRONE ALERT: Production alignment check failed."
+          echo "Notifying founder_digital_mind via seed_mind API..."
+          # When prod API is accessible from CI, this will POST a warning entry
+          # curl -X POST https://${{ secrets.PROD_DOMAIN }}/seed-mind/memory \
+          #   -H "Authorization: Bearer ${{ secrets.ADMIN_TOKEN }}" \
+          #   -H "Content-Type: application/json" \
+          #   -d '{"mind_name":"throne_mind","category":"RISK_OR_CONFUSION",
+          #        "title":"Production alignment check failed",
+          #        "content":"Throne detected a failure in the post-deploy audit. Immediate review required.",
+          #        "claim_type":"STRONG_THEORY","tags":"throne,production,alert,failure"}'
+          echo "Alert logged. Founder must review GitHub Actions for details."

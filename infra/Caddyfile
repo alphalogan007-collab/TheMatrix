@@ -1,0 +1,82 @@
+# ==============================================================================
+# Caddyfile — MindAI production reverse proxy
+# Auto-provisions TLS certificates from Let's Encrypt (zero config HTTPS)
+# ==============================================================================
+# Replace {$DOMAIN} with your actual domain, or set DOMAIN in your shell env.
+# ==============================================================================
+
+{
+    # Global options
+    email admin@mindai.app          # Let's Encrypt expiry notifications
+    admin off                        # Disable Caddy admin API on production
+    servers {
+        protocols h1 h2 h3           # Enable HTTP/1.1, HTTP/2, HTTP/3
+    }
+}
+
+# API backend
+api.mindai.app {
+    # Auto TLS — Let's Encrypt
+    tls {
+        protocols tls1.2 tls1.3
+        ciphers TLS_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_RSA_WITH_AES_256_GCM_SHA384 TLS_ECDHE_ECDSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_RSA_WITH_AES_128_GCM_SHA256 TLS_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 TLS_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256
+    }
+
+    # Security headers
+    header {
+        Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+        X-Content-Type-Options "nosniff"
+        X-Frame-Options "DENY"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+        Content-Security-Policy "default-src 'self'; frame-ancestors 'none'"
+        # Remove server identification headers
+        -Server
+        -X-Powered-By
+    }
+
+    # Rate limit at proxy level (extra protection on top of FastAPI limits)
+    # Requires caddy-ratelimit plugin — if not available, comment out this block
+    # rate_limit {
+    #     zone dynamic_zone {
+    #         match {
+    #             path /auth/*
+    #         }
+    #         key {remote_host}
+    #         events 5
+    #         window 1m
+    #     }
+    # }
+
+    # Reverse proxy to FastAPI
+    reverse_proxy backend:8000 {
+        health_uri /health
+        health_interval 15s
+        health_timeout 5s
+
+        # Pass real client IP for rate limiting
+        header_up X-Real-IP {remote_host}
+        header_up X-Forwarded-For {remote_host}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/api.mindai.app.log {
+            roll_size 10mb
+            roll_keep 5
+        }
+        level WARN
+    }
+}
+
+# Redirect bare domain to API (optional — remove if you have a web frontend)
+mindai.app {
+    redir https://api.mindai.app{uri} permanent
+}
+
+# Block all other hostnames (prevents host header injection)
+:80, :443 {
+    respond "Not found" 404
+}

@@ -1,0 +1,397 @@
+{
+  "info": {
+    "name": "MindAI API",
+    "_postman_id": "mindai-api-collection-v1",
+    "description": "All MindAI backend endpoints. Base URL: http://localhost:8000\n\nRule: every time a new endpoint is added to the backend, add it here too.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "",
+      "type": "string",
+      "description": "Set after POST /login"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "GET /restaurant-dashboard",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/restaurant-dashboard",
+            "description": "Restaurant operations dashboard webpage."
+          }
+        },
+        {
+          "name": "GET /health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/health",
+            "description": "Liveness check — returns {status: ok}"
+          }
+        },
+        {
+          "name": "GET /ready",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/ready",
+            "description": "Readiness check — checks DB + Redis connectivity"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "POST /register",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/register",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"StrongPassword1!\",\n  \"name\": \"Test User\"\n}"
+            },
+            "description": "Create a new account. Returns 201 on success."
+          }
+        },
+        {
+          "name": "POST /login",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/login",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"StrongPassword1!\"\n}"
+            },
+            "description": "Login. Copy access_token into the {{access_token}} variable."
+          }
+        },
+        {
+          "name": "POST /refresh",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/refresh",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refresh_token\": \"<your_refresh_token>\"\n}"
+            }
+          }
+        },
+        {
+          "name": "POST /logout",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/logout",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        },
+        {
+          "name": "GET /sessions",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/sessions",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "description": "List all active sessions for the current user."
+          }
+        },
+        {
+          "name": "DELETE /sessions/:session_id",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/sessions/:session_id",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "name": "User / Me",
+      "item": [
+        {
+          "name": "GET /me",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/me",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "description": "Get current user profile."
+          }
+        },
+        {
+          "name": "PATCH /me",
+          "request": {
+            "method": "PATCH",
+            "url": "{{base_url}}/me",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"New Name\"\n}"
+            }
+          }
+        },
+        {
+          "name": "DELETE /me",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/me",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "description": "Delete current user account. Returns 204."
+          }
+        },
+        {
+          "name": "GET /me/mind",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/me/mind",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" }
+            ],
+            "description": "Get the current mind state for this user."
+          }
+        },
+        {
+          "name": "POST /me/mind/signal",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/me/mind/signal",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"signal_type\": \"pattern\",\n  \"content\": \"light\"\n}"
+            },
+            "description": "Send a signal to the user's mind."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Seed — Topology Entry",
+      "item": [
+        {
+          "name": "POST /seed/input",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/seed/input",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"input_type\": \"text\",\n  \"content\": \"light\",\n  \"source\": \"user\",\n  \"session_id\": \"\"\n}"
+            },
+            "description": "Push raw input into the topology via the seed:input Redis stream.\n\nReturns:\n  ok: true\n  session_id: <uuid>\n  stream: 'seed:input'\n  msg_id: <redis stream id>\n\nThen watch: docker logs space_layer1 -f"
+          }
+        },
+        {
+          "name": "GET /seed/wisdom",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/seed/wisdom?limit=50",
+              "host": ["{{base_url}}"],
+              "path": ["seed", "wisdom"],
+              "query": [
+                { "key": "angel", "value": "", "disabled": true },
+                { "key": "category", "value": "", "disabled": true },
+                { "key": "limit", "value": "50" }
+              ]
+            },
+            "description": "List wisdom entries. Filter by angel (mind_name contains) or category."
+          }
+        },
+        {
+          "name": "GET /seed/graph",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/seed/graph",
+            "description": "Return node+edge graph of seeded wisdom for visualisation."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Manual Topology Triggers",
+      "item": [
+        {
+          "name": "POST /manual/start",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/manual/start",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topic\": \"the nature of light\"\n}"
+            },
+            "description": "Push a single topic directly into space:layer1 to start oscillation. Bypasses seed enrichment."
+          }
+        },
+        {
+          "name": "POST /manual/queue",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/manual/queue",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"topics\": [\"light\", \"consciousness\", \"gravity\"]\n}"
+            },
+            "description": "Push multiple topics into space:layer1."
+          }
+        },
+        {
+          "name": "DELETE /manual/queue/:topic",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/manual/queue/:topic",
+            "description": "Remove a topic from the queue."
+          }
+        },
+        {
+          "name": "POST /manual/stop",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/manual/stop",
+            "description": "Stop the manual processing loop."
+          }
+        },
+        {
+          "name": "GET /manual/status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/manual/status",
+            "description": "Get current manual processing status."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Quran",
+      "item": [
+        {
+          "name": "POST /quran/start",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/quran/start",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "description": "Start the Quran ingestion pipeline (uses Ollama locally — NOT part of topology)."
+          }
+        },
+        {
+          "name": "GET /quran/status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/quran/status",
+            "description": "Get Quran ingestion status."
+          }
+        },
+        {
+          "name": "GET /quran/revelation-order",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/quran/revelation-order",
+            "description": "Return Surahs in revelation order."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Guidance — Knowledge Ingestion",
+      "description": "Drop PDF/text/URL files in guidance/inbox/ — the scanner consumes them, stores in Redis, moves to guidance/completed/. NO LLM cost.",
+      "item": [
+        {
+          "name": "GET /guidance/list",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/guidance/list?limit=100",
+              "host": ["{{base_url}}"],
+              "path": ["guidance", "list"],
+              "query": [{ "key": "limit", "value": "100" }]
+            },
+            "description": "List all consumed guidance files (title, source, chars, timestamp). No content bodies."
+          }
+        },
+        {
+          "name": "GET /guidance/:file_id",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/guidance/:file_id",
+            "description": "Get full extracted text content of a consumed guidance file. Use file_id from /guidance/list."
+          }
+        },
+        {
+          "name": "GET /guidance/events/recent",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{base_url}}/guidance/events/recent?count=20",
+              "host": ["{{base_url}}"],
+              "path": ["guidance", "events", "recent"],
+              "query": [{ "key": "count", "value": "20" }]
+            },
+            "description": "Recent guidance consumption events from Redis stream."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Mind View — Health & Cache",
+      "item": [
+        {
+          "name": "GET /admin/mind/health",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/mind/health",
+            "description": "Comprehensive mind health for the Mind View UI. Returns corpus breakdown (total/foundation/structure/synthesis/guidance + synthesis by domain), resonance-based mind stage, ring activity (adam/eve/ca) with per-domain event counts, last 12 synthesis entries (learning feed), and uptime."
+          }
+        },
+        {
+          "name": "DELETE /admin/corpus/synthesis",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/admin/corpus/synthesis",
+            "description": "Prune synthesis:* entries from guidance:corpus and all barzakh:* checkpoint keys. Foundation (foundation:*), structure (structure:*), and guidance scanner entries are NEVER deleted. Returns counts of deleted entries and remaining corpus size. The mind rebuilds synthesis automatically from future inputs."
+          }
+        },
+        {
+          "name": "GET /admin/topology/stream (SSE)",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/topology/stream",
+            "header": [{ "key": "Accept", "value": "text/event-stream" }],
+            "description": "SSE stream of live topology pulse events from spirit:events (Adam ring), p:spirit:events (Eve ring), and ca:spirit:events (ca: ring). The Mind View UI subscribes here instead of /events which reads the old in-process bus. Each event has: type, ring, from, pattern, direction, domain, layer, ts."
+          }
+        }
+      ]
+    }
+  ]
+}

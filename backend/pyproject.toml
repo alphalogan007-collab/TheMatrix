@@ -1,0 +1,110 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "thematrix-backend"
+version = "0.1.0"
+description = "MindAI Centralized Identity Engine — Backend"
+requires-python = ">=3.11"
+dependencies = [
+    # Web framework
+    "fastapi>=0.111.0",
+    "uvicorn[standard]>=0.29.0",
+    "python-multipart>=0.0.9",
+
+    # Async HTTP
+    "httpx>=0.27.0",
+
+    # Database
+    "sqlmodel>=0.0.19",
+    "sqlalchemy[asyncio]>=2.0.30",
+    "asyncpg>=0.29.0",
+    "alembic>=1.13.0",
+    "pgvector>=0.2.5",
+
+    # Cache / Session
+    "redis>=5.0.4",
+
+    # Validation
+    "pydantic>=2.7.0",
+    "pydantic-settings>=2.3.0",
+    "email-validator>=2.1.1",
+
+    # Auth / Security
+    "python-jose[cryptography]>=3.3.0",
+    "passlib[argon2]>=1.7.4",
+    "argon2-cffi>=23.1.0",
+
+    # Background tasks
+    "celery[redis]>=5.4.0",
+
+    # Observability
+    "structlog>=24.1.0",
+    "opentelemetry-api>=1.24.0",
+    "opentelemetry-sdk>=1.24.0",
+    "opentelemetry-instrumentation-fastapi>=0.45b0",
+
+    # Cryptography
+    "cryptography>=42.0.7",
+
+    # Utilities
+    "python-dateutil>=2.9.0",
+    "ulid-py>=1.1.0",
+    "openai>=1.30.0",
+
+    # File parsing (admin upload to seed)
+    "pypdf>=4.0.0",
+    "beautifulsoup4>=4.12.0",
+
+    # YouTube extractor
+    "yt-dlp>=2024.1.1",
+
+    # Knowledge mining (Wikipedia + DuckDuckGo)
+    "Wikipedia-API>=0.6.0",
+    "ddgs>=0.1.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.2.0",
+    "pytest-asyncio>=0.23.6",
+    "pytest-cov>=5.0.0",
+    "httpx>=0.27.0",
+    "ruff>=0.4.5",
+    "mypy>=1.10.0",
+    "bandit[toml]>=1.7.8",
+    "pip-audit>=2.7.3",
+    "factory-boy>=3.3.0",
+    "faker>=25.2.0",
+]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "C4", "S", "UP"]
+ignore = ["S101"]  # allow assert in tests
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+ignore_missing_imports = true
+exclude = ["tests/", "alembic/"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "security: security-related tests",
+    "integration: integration tests requiring DB",
+    "unit: pure unit tests",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests"]
+skips = ["B101"]  # assert_used — allowed in tests

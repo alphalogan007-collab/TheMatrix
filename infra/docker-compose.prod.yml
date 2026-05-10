@@ -1,0 +1,192 @@
+# ==============================================================================
+# MindAI — Production Docker Compose
+# ==============================================================================
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# Key differences from dev:
+#   - Caddy reverse proxy with auto-TLS (Let's Encrypt)
+#   - DB and Redis NOT exposed on host ports (internal network only)
+#   - No source code volume mounts (fixed image, not hot-reload)
+#   - Uvicorn runs with multiple workers, no --reload
+#   - All secrets from .env.production
+#   - Automatic container restart on failure
+# ==============================================================================
+
+services:
+
+  # ----------------------------------------------------------------------------
+  # Caddy — HTTPS reverse proxy (auto TLS from Let's Encrypt)
+  # ----------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: mindai_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"   # HTTP/3
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - mindai_caddy_data:/data
+      - mindai_caddy_config:/config
+    networks:
+      - mindai_net
+    depends_on:
+      - backend
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL with pgvector
+  # ----------------------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: mindai_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    # No ports exposed to host — internal network only
+    expose:
+      - "5432"
+    volumes:
+      - mindai_pgdata:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - mindai_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # Postgres tuning for production (2-4GB RAM server)
+    command: >
+      postgres
+      -c max_connections=50
+      -c shared_buffers=256MB
+      -c effective_cache_size=768MB
+      -c maintenance_work_mem=64MB
+      -c checkpoint_completion_target=0.9
+      -c wal_buffers=16MB
+      -c default_statistics_target=100
+      -c log_min_duration_statement=1000
+
+  # ----------------------------------------------------------------------------
+  # Redis — cache, rate limiting, queues
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mindai_redis
+    restart: unless-stopped
+    command: >
+      redis-server
+      --requirepass ${REDIS_PASSWORD}
+      --save 60 1
+      --loglevel warning
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --protected-mode yes
+      --bind 0.0.0.0
+    # No ports exposed to host — internal network only
+    expose:
+      - "6379"
+    volumes:
+      - mindai_redisdata:/data
+    networks:
+      - mindai_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # MindAI Backend (production — no hot reload, multiple workers)
+  # ----------------------------------------------------------------------------
+  backend:
+    image: mindai_backend:latest
+    container_name: mindai_backend
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    # Not exposed to host — Caddy proxies to it
+    expose:
+      - "8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      # Only persist generated reports and uploads — NOT source code
+      - mindai_reports:/app/mind_reports
+      - mindai_uploads:/app/data/uploads
+    networks:
+      - mindai_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    # Production: 2 workers, no reload, optimised for async
+    command: >
+      uvicorn app.main:app
+      --host 0.0.0.0
+      --port 8000
+      --workers 2
+      --loop uvloop
+      --no-access-log
+
+  # ----------------------------------------------------------------------------
+  # Celery Worker
+  # ----------------------------------------------------------------------------
+  worker:
+    image: mindai_backend:latest
+    container_name: mindai_worker
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - mindai_reports:/app/mind_reports
+      - mindai_uploads:/app/data/uploads
+    networks:
+      - mindai_net
+    command: celery -A app.worker worker --loglevel=warning --queues=default,blueprint,ingestion
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+# ------------------------------------------------------------------------------
+# Named volumes — persisted across container restarts and updates
+# ------------------------------------------------------------------------------
+volumes:
+  mindai_pgdata:
+  mindai_redisdata:
+  mindai_reports:      # all AI-generated documents survive deploys
+  mindai_uploads:      # user uploads survive deploys
+  mindai_caddy_data:   # TLS certificates survive restarts
+  mindai_caddy_config:
+
+# ------------------------------------------------------------------------------
+# Internal network — no containers reachable from host except Caddy
+# ------------------------------------------------------------------------------
+networks:
+  mindai_net:
+    driver: bridge

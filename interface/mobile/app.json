@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "name": "TheMatrix",
+    "slug": "thematrix",
+    "scheme": "thematrix",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "platforms": ["ios", "android"],
+    "ios": { "supportsTablet": true },
+    "android": {
+      "adaptiveIcon": { "backgroundColor": "#0A0A14" }
+    },
+    "plugins": ["expo-router"]
+  }
+}

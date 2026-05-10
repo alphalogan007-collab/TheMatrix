@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: mindai-backend
+    runtime: docker
+    dockerfilePath: ./mindai/backend/Dockerfile
+    dockerContext: ./mindai/backend
+    plan: free
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mindai-db
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: redis
+          name: mindai-redis
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OLLAMA_MODEL
+        value: gpt-4o-mini
+      - key: ENVIRONMENT
+        value: production
+
+  - type: redis
+    name: mindai-redis
+    plan: free
+    maxmemoryPolicy: noeviction
+    ipAllowList: []
+
+databases:
+  - name: mindai-db
+    plan: free
+    databaseName: mindai
+    user: mindai_user

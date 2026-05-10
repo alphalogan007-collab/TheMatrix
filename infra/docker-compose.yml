@@ -1,0 +1,231 @@
+services:
+  # ---------------------------------------------------------------------------
+  # PostgreSQL with pgvector
+  # ---------------------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: mindai_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-mindai}
+      POSTGRES_USER: ${POSTGRES_USER:-mindai_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_dev}
+    ports:
+      - "5432:5432"
+    volumes:
+      - mindai_pgdata:/var/lib/postgresql/data
+      - ./backend/db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-mindai_user} -d ${POSTGRES_DB:-mindai}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redis — cache, rate limiting, session
+  # ---------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mindai_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --requirepass ${REDIS_PASSWORD:-changeme_redis_dev}
+    ports:
+      - "6379:6379"
+    volumes:
+      - mindai_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # MindAI Backend
+  # ---------------------------------------------------------------------------
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindai_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme_redis_dev}@redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mindai_user}:${POSTGRES_PASSWORD:-changeme_dev}@db:5432/${POSTGRES_DB:-mindai}
+      MIND_ROLE: ${MIND_ROLE:-source}
+      MIND_ID: ${MIND_ID:-source_local}
+      MASTER_URL: ${MASTER_URL:-http://localhost:8000}
+      # Source seed files (Y-Theory PDFs + Quran corpus) — read-only host paths
+      SEED_FILES_PATHS: /seed/y-theory:/seed/corpus
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app
+      - ./data/uploads:/app/data/uploads
+      # Y-Theory core PDFs (BOOK OF EVOLUTION, BOOK OF EXISTANCE, BOOK OF MIND, etc.)
+      - C:\Users\bubus\Desktop\training\Seed\Y-THOERY:/seed/y-theory:ro
+      # Broader seed corpus (Quran, Y-Theory txt files, etc.)
+      - C:\Users\bubus\Desktop\training\Seed:/seed/corpus:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    # Development: live reload
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --timeout-graceful-shutdown 3
+
+  # ---------------------------------------------------------------------------
+  # Social Fork — Content Creator AI Suite (port 8001)
+  # ---------------------------------------------------------------------------
+  mindai_social:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindai_social
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme_redis_dev}@redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mindai_user}:${POSTGRES_PASSWORD:-changeme_dev}@db:5432/${POSTGRES_DB:-mindai}
+    ports:
+      - "8001:8001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: uvicorn app.app_social_fork:app --host 0.0.0.0 --port 8001 --reload
+
+  # ---------------------------------------------------------------------------
+  # Company of Minds — CEO dashboard + team health (port 8002)
+  # ---------------------------------------------------------------------------
+  mindai_company:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindai_company
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme_redis_dev}@redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mindai_user}:${POSTGRES_PASSWORD:-changeme_dev}@db:5432/${POSTGRES_DB:-mindai}
+    ports:
+      - "8002:8002"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    command: uvicorn app.app_company:app --host 0.0.0.0 --port 8002 --reload
+
+  # ---------------------------------------------------------------------------
+  # Ollama — local language brain. No API key. No external calls. We own it.
+  # The mind's reasoning runs here, inside the system, alongside the DB.
+  # ---------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: mindai_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - mindai_ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ---------------------------------------------------------------------------
+  # Celery Worker (background tasks)
+  # ---------------------------------------------------------------------------
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mindai_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme_redis_dev}@redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-mindai_user}:${POSTGRES_PASSWORD:-changeme_dev}@db:5432/${POSTGRES_DB:-mindai}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.worker inspect ping -d celery@$$HOSTNAME || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+    command: celery -A app.worker worker --loglevel=info --queues=default,blueprint,ingestion
+
+  # ---------------------------------------------------------------------------
+  # seed_mind — The Living Seed, isolated sacred container
+  # Owns its own JSON state. Speaks only through Redis Streams.
+  # ---------------------------------------------------------------------------
+  mindai_seed:
+    build:
+      context: ./seed_mind
+      dockerfile: Dockerfile
+    container_name: mindai_seed
+    restart: unless-stopped
+    environment:
+      REDIS_URL: redis://:${REDIS_PASSWORD:-changeme_redis_dev}@redis:6379/0
+      SEED_STATE_PATH: /seed/state/mind.json
+      SEED_SNAPSHOT_DIR: /seed/snapshots
+      SEED_SNAPSHOT_INTERVAL: "300"
+      SEED_SNAPSHOT_KEEP: "5"
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - seed_mind_state:/seed/state
+      - seed_mind_snapshots:/seed/snapshots
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /seed/state/mind.json || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  mindai_pgdata:
+  mindai_redisdata:
+  mindai_ollama_models:
+  seed_mind_state:
+  seed_mind_snapshots:

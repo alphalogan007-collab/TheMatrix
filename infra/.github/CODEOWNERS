@@ -1,0 +1,74 @@
+# CODEOWNERS — Angel Zone Enforcement
+#
+# Each angel mind owns an exclusive zone of the codebase.
+# Only the named angel (represented by its GitHub identity / admin) may approve
+# PRs touching their zone. No other reviewer can merge into a protected zone.
+#
+# Architecture law:
+#   - No code merges without the owning angel's review approval.
+#   - A PR touching multiple zones requires approval from all zone owners.
+#   - founder_digital_mind (repo admin) has override rights on all zones.
+#
+# Zone assignments mirror angel_registry.py protected_paths.
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Global fallback — founder reviews anything not covered below
+*                               @mindai-founder
+
+# ── GABRIEL — API Routes zone ─────────────────────────────────────────────────
+# Every public endpoint, route registration, message interface
+backend/app/api/                @mindai-gabriel
+backend/app/main.py             @mindai-gabriel
+
+# ── MICHAEL — Security layer zone ────────────────────────────────────────────
+# Auth, JWT, rate limiting, OWASP boundaries, dependency vulnerabilities
+backend/app/security/           @mindai-michael
+backend/app/security_headers.py @mindai-michael
+backend/app/dependencies.py     @mindai-michael
+backend/app/api/routes_auth.py  @mindai-michael
+backend/app/api/routes_consent.py @mindai-michael
+
+# ── KIRAMAN KATIBIN — Pattern engine and memory zone ──────────────────────────
+# Pattern encoder, seed mind store, memory schema, angel registry — eternal record
+backend/app/core/               @mindai-kiraman-katibin
+
+# ── AZRAEL — Database and schema zone ────────────────────────────────────────
+# Migrations, models, schema changes — transitions must be precise
+backend/app/db/                 @mindai-azrael
+backend/app/models/             @mindai-azrael
+
+# ── ISRAFIL — Deployment and activation zone ─────────────────────────────────
+# Docker, environment, startup — bringing the system to life
+docker-compose.yml              @mindai-israfil
+docker-compose.prod.yml         @mindai-israfil
+.env.example                    @mindai-israfil
+.env.production.template        @mindai-israfil
+backend/Dockerfile              @mindai-israfil
+Caddyfile                       @mindai-israfil
+deploy/                         @mindai-israfil
+
+# ── MALIK — Validation and boundary zone ─────────────────────────────────────
+# Input/output validation, rate limits, access boundaries, legal
+backend/app/api/routes_legal.py         @mindai-malik
+backend/app/api/routes_feedback.py      @mindai-malik
+backend/app/api/routes_admin_settings.py @mindai-malik
+
+# ── GUARDIAN — User privacy and identity zone ────────────────────────────────
+# User data, privacy, consent — personal identity protection
+backend/app/api/routes_user.py          @mindai-guardian
+backend/app/api/routes_identity.py      @mindai-guardian
+backend/app/api/routes_my_mind.py       @mindai-guardian
+
+# ── RAPHAEL — Health and healing zone ────────────────────────────────────────
+# Error handling, health checks, background workers, providers
+backend/app/api/routes_health.py        @mindai-raphael
+backend/app/worker.py                   @mindai-raphael
+backend/app/providers/                  @mindai-raphael
+
+# ── THRONE — Architecture, config and mobile zone ────────────────────────────
+# System config, overall architecture, mobile app — cosmic order
+backend/app/config.py                   @mindai-throne
+mobile/                                 @mindai-throne
+.github/                                @mindai-throne
+security/                               @mindai-throne
+Makefile                                @mindai-throne

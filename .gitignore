@@ -1,0 +1,100 @@
+# Environment files — NEVER commit secrets
+.env
+*.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+*.pyc
+
+# Node / Expo / React Native
+node_modules/
+.expo/
+dist/
+.cache/
+*.tsbuildinfo
+
+# Expo build outputs
+android/
+ios/
+
+# Database dumps (may contain sensitive data — commit intentionally if needed)
+*.sql
+*.dump
+backup.sql
+
+# Docker
+.dockerignore
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/settings.json
+.idea/
+
+# Logs
+*.log
+logs/
+
+# AWS credentials and SSH keys — NEVER commit
+*.pem
+*.csv
+EC2.txt
+Adam_accessKeys.csv
+credentials
+
+# Secrets / config with real values
+secrets/
+*.secret
+
+# Session artefacts — not part of the project
+ARCHITECTURE_AUDIT_*.md
+
+# Test / debug scripts at root
+test_*.py
+bc_test.py
+trace_events.py
+validate_yaml.py
+overnight_watch.ps1
+overnight_watch.log
+build_cluster.log
+
+# Guidance inbox / completed — runtime data, not source code
+guidance/inbox/*.pdf
+guidance/inbox/*.txt
+guidance/inbox/*.md
+guidance/completed/
+
+# Mobile dependencies
+interface/mobile/node_modules/
+
+# One-time migration scripts
+scripts/move_held.py
+
+# Runtime state and snapshots — generated at runtime, not source
+topology/seed/extracted/
+backend/mind_reports/
+
+# Build and backup artefacts — not source
+Doc/corpus_backup_*.txt
+infra/build_log.txt
+backend/scripts/_tmp_*.py

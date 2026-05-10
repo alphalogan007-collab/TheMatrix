@@ -1,0 +1,1205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>MindAI Dashboard</title>
+<style>
+  :root {
+    --bg:      #0d1117;
+    --surface: #161b22;
+    --border:  #30363d;
+    --text:    #c9d1d9;
+    --muted:   #8b949e;
+    --accent:  #58a6ff;
+    --green:   #3fb950;
+    --yellow:  #d29922;
+    --red:     #f85149;
+    --purple:  #bc8cff;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 14px; }
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--border); background: var(--surface); }
+  header h1 { font-size: 18px; font-weight: 600; color: var(--accent); letter-spacing: .5px; }
+  #uptime { margin-left: auto; color: var(--muted); font-size: 12px; }
+  #status-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--muted); flex-shrink: 0; }
+  #status-dot.ok { background: var(--green); box-shadow: 0 0 6px var(--green); }
+  #status-dot.err { background: var(--red); box-shadow: 0 0 6px var(--red); }
+
+  main { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; padding: 16px 20px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+  .card h2 { font-size: 13px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; margin-bottom: 12px; }
+  .card.wide { grid-column: 1 / -1; }
+
+  /* Stream table */
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; color: var(--muted); font-weight: 500; font-size: 12px; padding: 4px 8px 8px 0; border-bottom: 1px solid var(--border); }
+  td { padding: 6px 8px 6px 0; border-bottom: 1px solid #21262d; vertical-align: top; }
+  tr:last-child td { border-bottom: none; }
+  .badge { display: inline-block; padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: 600; }
+  .badge-blue { background: #1f3a5f; color: var(--accent); }
+  .badge-green { background: #1a3a2a; color: var(--green); }
+  .badge-yellow { background: #3a2e0a; color: var(--yellow); }
+
+  /* Seed input */
+  .row { display: flex; gap: 8px; }
+  textarea { flex: 1; background: var(--bg); border: 1px solid var(--border); border-radius: 6px; color: var(--text); padding: 8px 10px; font-size: 13px; resize: vertical; min-height: 70px; font-family: inherit; }
+  textarea:focus { outline: none; border-color: var(--accent); }
+  button { background: var(--accent); color: #0d1117; border: none; border-radius: 6px; padding: 8px 18px; font-weight: 600; cursor: pointer; font-size: 13px; white-space: nowrap; align-self: flex-end; }
+  button:hover { opacity: .85; }
+  button.secondary { background: var(--surface); color: var(--text); border: 1px solid var(--border); }
+  button.secondary:hover { border-color: var(--accent); color: var(--accent); }
+  #seed-result { margin-top: 8px; font-size: 12px; color: var(--muted); min-height: 18px; }
+
+  /* Event list */
+  .event-list { display: flex; flex-direction: column; gap: 6px; max-height: 340px; overflow-y: auto; }
+  .event-item { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 12px; }
+  .event-item .eid { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  .event-item .layer-tag { font-weight: 600; color: var(--purple); }
+  .event-item .content-preview { color: var(--text); margin-top: 2px; white-space: pre-wrap; word-break: break-word; }
+
+  /* Guidance list */
+  .guidance-list { display: flex; flex-direction: column; gap: 6px; max-height: 280px; overflow-y: auto; }
+  .guidance-item { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font-size: 12px; cursor: pointer; }
+  .guidance-item:hover { border-color: var(--accent); }
+  .guidance-item .g-title { font-weight: 600; color: var(--accent); }
+  .guidance-item .g-meta { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+  /* Guidance modal */
+  #modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,.7); z-index: 100; align-items: center; justify-content: center; }
+  #modal-overlay.open { display: flex; }
+  #modal { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; max-width: 700px; width: 95%; max-height: 80vh; display: flex; flex-direction: column; padding: 20px; gap: 12px; }
+  #modal h3 { font-size: 15px; }
+  #modal-content { overflow-y: auto; white-space: pre-wrap; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 10px; min-height: 180px; max-height: 58vh; }
+  #modal-close { align-self: flex-end; }
+
+  /* Refresh control */
+  .ctrl-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .ctrl-row label { color: var(--muted); font-size: 12px; }
+  select { background: var(--bg); border: 1px solid var(--border); border-radius: 5px; color: var(--text); padding: 3px 6px; font-size: 12px; }
+
+  /* File upload drop zone */
+  .drop-zone { border: 2px dashed var(--border); border-radius: 8px; padding: 22px; text-align: center; color: var(--muted); cursor: pointer; transition: border-color .2s, background .2s; }
+  .drop-zone:hover, .drop-zone.drag-over { border-color: var(--accent); background: #1f2a38; color: var(--accent); }
+  .drop-zone input[type=file] { display: none; }
+  .file-info { margin-top: 10px; font-size: 12px; color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; display: none; }
+  .file-info.visible { display: flex; align-items: center; gap: 10px; }
+
+  /* Progress tracker */
+  .step { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 6px; background: var(--bg); border: 1px solid var(--border); font-size: 12px; }
+  .step-icon { font-size: 15px; flex-shrink: 0; line-height: 1.4; }
+  .step-body { flex: 1; min-width: 0; }
+  .step-label { font-weight: 600; color: var(--text); }
+  .step-output { color: var(--muted); margin-top: 3px; white-space: pre-wrap; word-break: break-word; }
+  .step.done { border-color: var(--green); }
+  .step.active { border-color: var(--accent); animation: pulse-border 1.2s infinite; }
+  .step.waiting { opacity: .4; }
+  @keyframes pulse-border { 0%,100% { border-color: var(--accent); } 50% { border-color: #1f3a5f; } }
+
+  .empty { color: var(--muted); font-size: 12px; padding: 12px 0; }
+</style>
+</head>
+<body>
+
+<header>
+  <div id="status-dot"></div>
+  <h1>&#9632; MindAI Dashboard</h1>
+  <div id="uptime">—</div>
+</header>
+
+<main>
+  <!-- Stream lengths -->
+  <div class="card">
+    <div class="ctrl-row">
+      <h2 style="margin-bottom:0;flex:1">Redis Streams</h2>
+      <label>Auto-refresh</label>
+      <select id="refresh-interval">
+        <option value="0">Off</option>
+        <option value="3000" selected>3 s</option>
+        <option value="10000">10 s</option>
+        <option value="30000">30 s</option>
+      </select>
+      <button class="secondary" onclick="loadStatus()">↻</button>
+    </div>
+    <table>
+      <thead><tr><th>Stream</th><th>Label</th><th style="text-align:right">Length</th></tr></thead>
+      <tbody id="streams-body"><tr><td colspan="3" class="empty">Loading…</td></tr></tbody>
+    </table>
+  </div>
+
+  <!-- Guidance -->
+  <div class="card">
+    <h2>Guidance Corpus — <span id="corpus-count">0</span> files</h2>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+      <button class="secondary" onclick="saveWisdom()" style="font-size:12px;padding:5px 12px">💾 Save Wisdom → Corpus</button>
+      <input id="corpus-search" type="text" placeholder="Filter…" oninput="guidanceRender()" style="flex:1;min-width:80px;font-size:12px;padding:4px 8px;background:var(--bg);border:1px solid var(--border);border-radius:4px;color:var(--text)">
+    </div>
+    <div id="guidance-list" class="guidance-list" style="max-height:340px"><div class="empty">Loading…</div></div>
+    <div id="guidance-pager" style="display:flex;align-items:center;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--muted);display:none">
+      <button class="secondary" id="corpus-prev" onclick="guidancePage(-1)" style="font-size:11px;padding:3px 10px">‹ Prev</button>
+      <span id="corpus-page-info">Page 1 of 1</span>
+      <button class="secondary" id="corpus-next" onclick="guidancePage(1)" style="font-size:11px;padding:3px 10px">Next ›</button>
+    </div>
+  </div>
+
+  <!-- Spirit events -->
+  <div class="card">
+    <h2>Spirit Events (spirit:events)</h2>
+    <div id="events-list" class="event-list"><div class="empty">Loading…</div></div>
+  </div>
+
+  <!-- Guidance events -->
+  <div class="card">
+    <h2>Guidance Ingest Events</h2>
+    <div id="guidance-events-list" class="event-list"><div class="empty">Loading…</div></div>
+  </div>
+
+  <!-- Seed input (text) -->
+  <div class="card">
+    <h2>Push Text to Seed Stream</h2>
+    <div class="row">
+      <textarea id="seed-content" placeholder="Type a message to push into seed:input…"></textarea>
+      <button onclick="pushSeed()">Send →</button>
+    </div>
+    <div id="seed-result"></div>
+  </div>
+
+  <!-- YouTube extractor -->
+  <div class="card wide">
+    <h2>&#x1F3AC; YouTube → Seed Stream</h2>
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:10px">
+      <input id="yt-url" type="url" placeholder="https://www.youtube.com/watch?v=… or playlist URL"
+             style="flex:1;min-width:260px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 10px;font-size:13px;font-family:inherit"
+             onkeydown="if(event.key==='Enter')ytStart()" />
+      <label style="display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;cursor:pointer;white-space:nowrap">
+        <input type="checkbox" id="yt-playlist" style="accent-color:var(--accent);width:15px;height:15px" />
+        Playlist mode
+      </label>
+      <button onclick="ytStart()" id="yt-btn">Extract &amp; Seed &#x25B6;</button>
+    </div>
+    <div id="yt-result" style="font-size:12px;color:var(--muted);min-height:18px;margin-bottom:8px"></div>
+
+    <!-- Per-video progress list -->
+    <div id="yt-job-panel" style="display:none">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+        <span id="yt-job-summary" style="font-size:12px;color:var(--muted)"></span>
+        <span id="yt-job-id" style="font-size:11px;color:var(--border)"></span>
+      </div>
+      <div id="yt-video-list" style="display:flex;flex-direction:column;gap:5px;max-height:320px;overflow-y:auto"></div>
+    </div>
+  </div>
+
+  <!-- Seed input (file upload) -->
+  <div class="card">
+    <h2>Upload File → Seed Stream</h2>
+    <div class="drop-zone" id="drop-zone" onclick="document.getElementById('file-input').click()"
+         ondragover="event.preventDefault();this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDrop(event)">
+      <input type="file" id="file-input" accept=".txt,.md,.pdf,.html,.htm,.csv,.json,.yaml,.yml" onchange="handleFileSelect(event)" />
+      <div>&#x1F4C4; Click to choose or drag &amp; drop</div>
+      <div style="font-size:11px;margin-top:4px">.pdf · .txt · .md · .html · .csv · .json · .yaml</div>
+    </div>
+    <div class="file-info" id="file-info">
+      <span id="file-info-name" style="flex:1;color:var(--accent);font-weight:600"></span>
+      <span id="file-info-size" style="color:var(--muted)"></span>
+      <button onclick="uploadToSeed()">Push to Seed →</button>
+      <button class="secondary" onclick="clearFile()">✕</button>
+    </div>
+    <div id="upload-result" style="margin-top:8px;font-size:12px;color:var(--muted);min-height:18px"></div>
+  </div>
+
+  <!-- Wisdoms Saved to Disk -->
+  <div class="card wide">
+    <h2 style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none" onclick="toggleWisdomSection()">
+      <span id="wisdom-toggle-arrow" style="font-size:13px;transition:transform .2s;display:inline-block">▼</span>
+      📖 Wisdoms (Saved to Disk)
+    </h2>
+    <div id="wisdom-section-body">
+      <div style="display:flex;gap:8px;align-items:center;margin-bottom:10px;flex-wrap:wrap">
+        <button onclick="loadWisdoms()" class="secondary" style="font-size:12px">↺ Refresh</button>
+        <button onclick="loadAllWisdomsToCorpus()" style="background:var(--purple);color:#0d1117;font-size:12px">📥 Load All into Corpus</button>
+        <span style="font-size:11px;color:var(--muted)">Wisdoms are auto-saved to disk on every Layer 7 completion — they survive Redis wipes.</span>
+      </div>
+      <div id="wisdom-list"><div class="empty">Loading…</div></div>
+      <div id="wisdom-load-result" style="font-size:12px;color:var(--muted);margin-top:6px"></div>
+    </div>
+  </div>
+
+  <!-- Quran Loader -->
+  <div class="card wide" style="border-color:var(--accent)">
+    <h2 style="color:var(--accent)">📖 Quran → Corpus Loader</h2>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 12px">
+      Fetches all 114 Surahs (Arabic + English Sahih International) from alquran.cloud and loads them into
+      <code>guidance:corpus</code> in revelation order. Once loaded, run the Knowledge Absorption Loop below.
+    </p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px">
+      <button id="quran-load-btn" onclick="quranLoad()" style="background:var(--accent);color:#0d1117">📥 Load Full Quran</button>
+      <button onclick="quranStop()" class="secondary" style="font-size:12px">⏹ Stop</button>
+      <span id="quran-result" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div id="quran-status-bar" style="display:none;background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:13px">
+      <div style="display:flex;gap:20px;flex-wrap:wrap">
+        <span>Status: <strong id="quran-status-text" style="color:var(--accent)">—</strong></span>
+        <span>Progress: <strong id="quran-progress">—</strong></span>
+        <span>Loaded: <strong id="quran-loaded" style="color:var(--green)">0</strong> surahs</span>
+        <span>Errors: <strong id="quran-errors" style="color:var(--yellow)">0</strong></span>
+      </div>
+      <div style="margin-top:6px;font-size:12px;color:var(--muted)">Current: <span id="quran-current" style="color:var(--accent)">—</span></div>
+      <div style="margin-top:6px">
+        <div style="background:var(--border);border-radius:4px;height:6px;overflow:hidden">
+          <div id="quran-bar" style="background:var(--accent);height:6px;width:0%;transition:width .4s"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Knowledge Absorption Training Loop -->
+  <div class="card wide" style="border-color:var(--purple)">
+    <h2 style="color:var(--purple)">🔁 Knowledge Absorption Loop</h2>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 12px">
+      Feeds every corpus entry through the 7-layer topology, saves the Layer 7 output back as new knowledge, then repeats.
+      Runs until convergence — when no new knowledge is generated (the topology has fully absorbed the pattern).
+      <em>This is how the Quran becomes internal knowledge, not just a referenced file.</em>
+    </p>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px">
+      <label style="font-size:12px;color:var(--muted)">Max cycles:
+        <input id="loop-max-cycles" type="number" min="1" max="100" value="10"
+          style="width:60px;margin-left:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 6px;font-size:13px">
+      </label>
+      <label style="font-size:12px;color:var(--muted)">Order:
+        <select id="loop-sort-by" style="margin-left:6px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:4px 6px;font-size:13px">
+          <option value="default">Default</option>
+          <option value="revelation">Revelation order</option>
+          <option value="length">Shortest first</option>
+        </select>
+      </label>
+      <button id="loop-start-btn" onclick="loopStart()" style="background:var(--purple);color:#0d1117">▶ Start Loop</button>
+      <button id="loop-stop-btn" onclick="loopStop()" class="secondary" style="display:none">⏹ Stop</button>
+      <span id="loop-result" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <!-- Status panel -->
+    <div id="loop-status-panel" style="display:none">
+      <div id="loop-status-bar" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 14px;font-size:13px;margin-bottom:10px">
+        <div style="display:flex;gap:20px;flex-wrap:wrap">
+          <span>Status: <strong id="loop-status-text" style="color:var(--purple)">—</strong></span>
+          <span>Cycle: <strong id="loop-cycle">—</strong></span>
+          <span>New wisdoms: <strong id="loop-new-total" style="color:var(--green)">0</strong></span>
+          <span>Timeouts: <strong id="loop-timeouts" style="color:var(--yellow)">0</strong></span>
+        </div>
+        <div style="margin-top:8px;font-size:12px;color:var(--muted)">
+          Processing: <span id="loop-current-title" style="color:var(--accent)">—</span>
+          <span id="loop-current-progress"></span>
+        </div>
+      </div>
+      <div id="loop-convergence" style="display:none;background:var(--bg);border:2px solid var(--green);border-radius:8px;padding:14px;text-align:center">
+        <div style="font-size:20px;margin-bottom:6px">✅</div>
+        <div style="font-size:14px;font-weight:600;color:var(--green)">Convergence Reached</div>
+        <div style="font-size:12px;color:var(--muted);margin-top:4px">
+          The topology produced no new knowledge this cycle — the pattern is fully absorbed into the topology state.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Danger Zone -->
+  <div class="card wide" style="border-color:#f85149">
+    <h2 style="color:var(--red)">⚠ Danger Zone</h2>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button onclick="saveWisdom()" style="background:var(--purple);color:#0d1117">💾 Save Wisdom First</button>
+      <button onclick="confirmWipe(true)"  style="background:var(--yellow);color:#0d1117">🔄 Wipe &amp; Keep Wisdom</button>
+      <button onclick="confirmWipe(false)" style="background:var(--red);color:#fff">💥 Full Wipe (everything)</button>
+      <span id="wipe-result" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:8px">
+      <b>Save Wisdom First</b> — harvests Layer 7 outputs → guidance corpus (survives wipe) &nbsp;·&nbsp;
+      <b>Wipe &amp; Keep Wisdom</b> — clears streams + bad corpus files, wisdom stays &nbsp;·&nbsp;
+      <b>Full Wipe</b> — clears absolutely everything
+    </div>
+  </div>
+
+  <!-- Mind Response — shown after any seed push -->
+  <div class="card wide" id="mind-response-card" style="display:none">
+    <h2>&#x1F9E0; Mind Response</h2>
+    <div id="mind-question" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:13px;color:var(--accent);margin-bottom:12px;white-space:pre-wrap;word-break:break-word"></div>
+    <div id="progress-steps" style="display:flex;flex-direction:column;gap:6px"></div>
+    <div id="progress-summary" style="margin-top:10px;font-size:12px;color:var(--muted)"></div>
+    <!-- Final consolidated answer -->
+    <div id="mind-answer" style="display:none;margin-top:16px">
+      <div style="font-size:12px;font-weight:600;color:var(--purple);margin-bottom:6px;text-transform:uppercase;letter-spacing:.6px">&#x2728; Mind Answer (Convergence · Layer 7)</div>
+      <div id="mind-answer-text" style="background:var(--bg);border:1px solid var(--purple);border-radius:8px;padding:14px;font-size:13px;color:var(--text);white-space:pre-wrap;word-break:break-word;line-height:1.6"></div>
+    </div>
+  </div>
+</main>
+
+<!-- Guidance content modal -->
+<div id="modal-overlay">
+  <div id="modal">
+    <h3 id="modal-title"></h3>
+    <div id="modal-view-mode">
+      <div id="modal-content">Loading…</div>
+      <div style="display:flex;gap:8px;margin-top:12px">
+        <button class="secondary" onclick="closeModal()">Close</button>
+        <button id="modal-edit-btn" onclick="startModalEdit()" style="display:none">✏️ Edit</button>
+      </div>
+    </div>
+    <div id="modal-edit-mode" style="display:none">
+      <div style="margin-bottom:6px">
+        <label style="font-size:11px;color:var(--muted)">Title</label>
+        <input id="modal-edit-title" type="text" style="width:100%;box-sizing:border-box;margin-top:2px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:6px 8px;font-size:13px">
+      </div>
+      <label style="font-size:11px;color:var(--muted)">Content</label>
+      <textarea id="modal-edit-content" style="width:100%;box-sizing:border-box;height:360px;margin-top:2px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:4px;padding:8px;font-size:13px;font-family:inherit;resize:vertical"></textarea>
+      <div style="display:flex;gap:8px;margin-top:10px;align-items:center">
+        <button onclick="saveModalEdit()" style="background:var(--green);color:#0d1117">💾 Save</button>
+        <button class="secondary" onclick="cancelModalEdit()">Cancel</button>
+        <span id="modal-save-result" style="font-size:12px;color:var(--muted)"></span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '';   // same origin — nginx proxies /api → backend, but we're on same host
+
+async function apiFetch(path) {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(res.status + ' ' + res.statusText);
+  return res.json();
+}
+
+// ── Status (streams + uptime) ────────────────────────────────────────────────
+async function loadStatus() {
+  try {
+    const data = await apiFetch('/admin/status');
+    const dot = document.getElementById('status-dot');
+    dot.className = 'ok';
+    document.getElementById('uptime').textContent =
+      'uptime ' + fmtUptime(data.uptime_secs) + '  ·  ' + new Date(data.ts).toLocaleTimeString();
+
+    const tbody = document.getElementById('streams-body');
+    const entries = Object.entries(data.streams);
+    tbody.innerHTML = entries.map(([key, info]) => {
+      const len = info.length;
+      const cls = len > 100 ? 'badge-yellow' : len > 0 ? 'badge-green' : 'badge-blue';
+      return `<tr>
+        <td><code style="color:var(--muted);font-size:11px">${esc(key)}</code></td>
+        <td style="color:var(--muted);font-size:12px">${esc(info.label)}</td>
+        <td style="text-align:right"><span class="badge ${cls}">${len}</span></td>
+      </tr>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('status-dot').className = 'err';
+    document.getElementById('streams-body').innerHTML =
+      `<tr><td colspan="3" style="color:var(--red)">${esc(e.message)}</td></tr>`;
+  }
+}
+
+// ── Spirit events ────────────────────────────────────────────────────────────
+async function loadEvents() {
+  try {
+    const data = await apiFetch('/admin/events/recent?count=20');
+    const el = document.getElementById('events-list');
+    if (!data.events.length) { el.innerHTML = '<div class="empty">No events yet</div>'; return; }
+    el.innerHTML = data.events.map(ev => {
+      const layer = ev.layer || ev.mind_name || '';
+      const content = ev.output || ev.content || ev.message || JSON.stringify(ev, null, 2);
+      return `<div class="event-item">
+        <div class="eid">${esc(ev.id)} ${layer ? '· <span class="layer-tag">'+esc(layer)+'</span>' : ''}</div>
+        <div class="content-preview">${esc(String(content).slice(0, 300))}</div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    document.getElementById('events-list').innerHTML = `<div class="empty" style="color:var(--red)">${esc(e.message)}</div>`;
+  }
+}
+
+// ── Guidance corpus ──────────────────────────────────────────────────────────
+const CORPUS_PAGE_SIZE = 20;
+let _guidanceItems = [];
+let _guidancePage = 0;
+
+async function loadGuidance() {
+  try {
+    const data = await apiFetch('/guidance/list?limit=500');
+    _guidanceItems = data.items || data;
+    _guidancePage = 0;
+    document.getElementById('corpus-count').textContent = _guidanceItems.length;
+    guidanceRender();
+  } catch(e) {
+    document.getElementById('guidance-list').innerHTML = `<div class="empty" style="color:var(--red)">${esc(e.message)}</div>`;
+  }
+}
+
+function guidancePage(delta) {
+  const q = (document.getElementById('corpus-search')?.value || '').toLowerCase();
+  const filtered = q ? _guidanceItems.filter(f => (f.title+f.source+f.file_id).toLowerCase().includes(q)) : _guidanceItems;
+  const pages = Math.max(1, Math.ceil(filtered.length / CORPUS_PAGE_SIZE));
+  _guidancePage = Math.max(0, Math.min(_guidancePage + delta, pages - 1));
+  guidanceRender();
+}
+
+function guidanceRender() {
+  const el = document.getElementById('guidance-list');
+  const pager = document.getElementById('guidance-pager');
+  const q = (document.getElementById('corpus-search')?.value || '').toLowerCase();
+  const filtered = q ? _guidanceItems.filter(f => (f.title+f.source+f.file_id).toLowerCase().includes(q)) : _guidanceItems;
+
+  if (!filtered.length) {
+    el.innerHTML = _guidanceItems.length ? '<div class="empty">No matches</div>' : '<div class="empty">No guidance files consumed yet.<br>Drop a .txt / .pdf / .url into guidance/inbox/</div>';
+    pager.style.display = 'none';
+    return;
+  }
+
+  const pages = Math.max(1, Math.ceil(filtered.length / CORPUS_PAGE_SIZE));
+  _guidancePage = Math.max(0, Math.min(_guidancePage, pages - 1));
+  const slice = filtered.slice(_guidancePage * CORPUS_PAGE_SIZE, (_guidancePage + 1) * CORPUS_PAGE_SIZE);
+
+  el.innerHTML = slice.map(f => `
+    <div class="guidance-item" style="display:flex;align-items:flex-start;gap:8px">
+      <div style="flex:1" onclick="openGuidance('${esc(f.file_id)}','${esc(f.title)}')">
+        <div class="g-title">${esc(f.title || f.file_id)}</div>
+        <div class="g-meta">${esc(f.source || '')}  ·  ${fmtNum(f.chars)} chars  ·  ${fmtDate(f.ts)}</div>
+      </div>
+      <button class="secondary" onclick="removeGuidance('${esc(f.file_id)}')" style="font-size:11px;padding:3px 8px;flex-shrink:0;color:var(--red);border-color:var(--red)">✕</button>
+    </div>`).join('');
+
+  document.getElementById('corpus-page-info').textContent = `Page ${_guidancePage + 1} of ${pages}  (${filtered.length} items)`;
+  document.getElementById('corpus-prev').disabled = _guidancePage === 0;
+  document.getElementById('corpus-next').disabled = _guidancePage >= pages - 1;
+  pager.style.display = pages > 1 ? 'flex' : 'none';
+}
+
+// ── Guidance ingest events ───────────────────────────────────────────────────
+async function loadGuidanceEvents() {
+  try {
+    const data = await apiFetch('/admin/guidance/recent?count=10');
+    const el = document.getElementById('guidance-events-list');
+    if (!data.events.length) { el.innerHTML = '<div class="empty">No ingest events yet</div>'; return; }
+    el.innerHTML = data.events.map(ev => `
+      <div class="event-item">
+        <div class="eid">${esc(ev.id)}</div>
+        <div class="content-preview">${esc(ev.title || '')}  ·  ${fmtNum(ev.chars)} chars  ·  ${esc(ev.source || '')}</div>
+      </div>`).join('');
+  } catch(e) {
+    document.getElementById('guidance-events-list').innerHTML = `<div class="empty" style="color:var(--red)">${esc(e.message)}</div>`;
+  }
+}
+
+// ── Seed push ────────────────────────────────────────────────────────────────
+async function pushSeed() {
+  const content = document.getElementById('seed-content').value.trim();
+  if (!content) return;
+  const res = document.getElementById('seed-result');
+  res.textContent = 'Sending…';
+  try {
+    const data = await fetch('/admin/seed', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ content, source: 'dashboard' }),
+    }).then(r => r.json());
+    res.textContent = `✓ pushed  ·  session: ${data.session_id}`;
+    res.style.color = 'var(--green)';
+    const q = document.getElementById('seed-content').value.trim();
+    document.getElementById('seed-content').value = '';
+    startProgressTracking(data.session_id, q);
+  } catch(e) {
+    res.textContent = '✗ ' + e.message;
+    res.style.color = 'var(--red)';
+  }
+}
+
+// ── Guidance modal (view + edit) ──────────────────────────────────────────────
+let _modalFileId = null;
+let _modalType = null; // 'guidance' or 'wisdom'
+
+async function openGuidance(file_id, title) {
+  _modalFileId = file_id;
+  _modalType = 'guidance';
+  document.getElementById('modal-title').textContent = title || file_id;
+  document.getElementById('modal-content').textContent = 'Loading…';
+  document.getElementById('modal-overlay').className = 'open';
+  document.getElementById('modal-view-mode').style.display = '';
+  document.getElementById('modal-edit-mode').style.display = 'none';
+  document.getElementById('modal-edit-btn').style.display = 'none';
+  try {
+    const data = await apiFetch('/guidance/' + encodeURIComponent(file_id));
+    document.getElementById('modal-content').textContent = data.content || JSON.stringify(data, null, 2);
+    document.getElementById('modal-edit-btn').style.display = '';
+    document.getElementById('modal-edit-btn').dataset.title = data.title || title || '';
+    document.getElementById('modal-edit-btn').dataset.content = data.content || '';
+  } catch(e) {
+    document.getElementById('modal-content').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function openWisdom(wid, title) {
+  _modalFileId = wid;
+  _modalType = 'wisdom';
+  document.getElementById('modal-title').textContent = '📖 ' + (title || wid);
+  document.getElementById('modal-content').textContent = 'Loading…';
+  document.getElementById('modal-overlay').className = 'open';
+  document.getElementById('modal-view-mode').style.display = '';
+  document.getElementById('modal-edit-mode').style.display = 'none';
+  document.getElementById('modal-edit-btn').style.display = 'none';
+  try {
+    const data = await apiFetch('/admin/wisdom/' + encodeURIComponent(wid));
+    document.getElementById('modal-content').textContent = data.output || JSON.stringify(data, null, 2);
+    document.getElementById('modal-edit-btn').style.display = '';
+    document.getElementById('modal-edit-btn').dataset.title = data.title || data.topic || '';
+    document.getElementById('modal-edit-btn').dataset.content = data.output || '';
+  } catch(e) {
+    document.getElementById('modal-content').textContent = 'Error: ' + e.message;
+  }
+}
+
+function startModalEdit() {
+  const btn = document.getElementById('modal-edit-btn');
+  document.getElementById('modal-edit-title').value = btn.dataset.title || '';
+  document.getElementById('modal-edit-content').value = btn.dataset.content || '';
+  document.getElementById('modal-view-mode').style.display = 'none';
+  document.getElementById('modal-edit-mode').style.display = '';
+  document.getElementById('modal-save-result').textContent = '';
+}
+
+function cancelModalEdit() {
+  document.getElementById('modal-view-mode').style.display = '';
+  document.getElementById('modal-edit-mode').style.display = 'none';
+}
+
+async function saveModalEdit() {
+  const res = document.getElementById('modal-save-result');
+  const title = document.getElementById('modal-edit-title').value;
+  const content = document.getElementById('modal-edit-content').value;
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Saving…';
+  try {
+    let url, body;
+    if (_modalType === 'wisdom') {
+      url = '/admin/wisdom/' + encodeURIComponent(_modalFileId);
+      body = JSON.stringify({ title, output: content });
+    } else {
+      url = '/admin/guidance/' + encodeURIComponent(_modalFileId);
+      body = JSON.stringify({ title, content });
+    }
+    const data = await fetch(url, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    }).then(r => { if (!r.ok) return r.json().then(j => { throw new Error(j.detail || r.statusText); }); return r.json(); });
+    res.style.color = 'var(--green)';
+    res.textContent = `✓ Saved (${fmtNum(data.chars)} chars)`;
+    // Update stored content for re-view
+    document.getElementById('modal-edit-btn').dataset.title = title;
+    document.getElementById('modal-edit-btn').dataset.content = content;
+    document.getElementById('modal-content').textContent = content;
+    setTimeout(() => {
+      cancelModalEdit();
+      loadGuidance();
+      loadWisdoms();
+    }, 1200);
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = '✗ ' + e.message;
+  }
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').className = '';
+}
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === e.currentTarget) closeModal();
+});
+
+// ── Wisdom section toggle ─────────────────────────────────────────────────────
+let _wisdomCollapsed = false;
+function toggleWisdomSection() {
+  _wisdomCollapsed = !_wisdomCollapsed;
+  document.getElementById('wisdom-section-body').style.display = _wisdomCollapsed ? 'none' : '';
+  document.getElementById('wisdom-toggle-arrow').style.transform = _wisdomCollapsed ? 'rotate(-90deg)' : '';
+}
+
+// ── Wisdom list (disk-backed) ─────────────────────────────────────────────────
+async function loadWisdoms() {
+  const el = document.getElementById('wisdom-list');
+  try {
+    const data = await apiFetch('/admin/wisdom/list');
+    const wisdoms = data.wisdoms || [];
+    if (!wisdoms.length) {
+      el.innerHTML = '<div class="empty">No wisdoms on disk yet. They are saved automatically every time a query passes through Layer 7.</div>';
+      return;
+    }
+    el.innerHTML = wisdoms.map(w => {
+      const title = esc(w.title || w.topic || w.id);
+      const date = fmtDate(w.ts);
+      const chars = fmtNum(w.chars);
+      const dir = w.direction === 'descending' ? '↓' : w.direction === 'ascending' ? '↑' : '';
+      return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:18px">📖</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:13px;font-weight:600;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${title}">${title}</div>
+          <div style="font-size:11px;color:var(--muted)">${date}  ·  Layer ${w.layer} ${dir}  ·  ${chars} chars</div>
+        </div>
+        <button class="secondary" onclick="openWisdom(${JSON.stringify(w.id)}, ${JSON.stringify(w.title || w.topic || '')})" style="font-size:11px;padding:4px 8px">View / Edit</button>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    el.innerHTML = `<div class="empty" style="color:var(--red)">Error: ${esc(e.message)}</div>`;
+  }
+}
+
+async function loadAllWisdomsToCorpus() {
+  const res = document.getElementById('wisdom-load-result');
+  res.style.color = 'var(--muted)';
+  res.textContent = '⏳ Loading all wisdoms into corpus…';
+  try {
+    const data = await fetch('/admin/wisdom/load-all', { method: 'POST' }).then(r => r.json());
+    res.style.color = 'var(--green)';
+    res.textContent = `✓ Loaded ${data.loaded} of ${data.total_on_disk} wisdoms into guidance:corpus`;
+    setTimeout(() => loadGuidance(), 500);
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = '✗ ' + e.message;
+  }
+}
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function fmtUptime(s) {
+  const h = Math.floor(s/3600), m = Math.floor((s%3600)/60), ss = s%60;
+  return (h?h+'h ':'') + (m?m+'m ':'') + ss+'s';
+}
+function fmtNum(n) { return n != null ? Number(n).toLocaleString() : '—'; }
+function fmtDate(ts) { if (!ts) return ''; try { return new Date(ts).toLocaleString(); } catch { return ts; } }
+
+// ── Auto-refresh ─────────────────────────────────────────────────────────────
+let timer = null;
+function startRefresh() {
+  if (timer) clearInterval(timer);
+  const ms = parseInt(document.getElementById('refresh-interval').value);
+  if (ms > 0) timer = setInterval(refreshAll, ms);
+}
+document.getElementById('refresh-interval').addEventListener('change', startRefresh);
+
+function refreshAll() {
+  loadStatus();
+  loadEvents();
+  loadGuidance();
+  loadGuidanceEvents();
+  loadWisdoms();
+}
+
+// ── File upload to seed ───────────────────────────────────────────────────────
+let _selectedFile = null;
+
+function handleFileSelect(e) {
+  setFile(e.target.files[0]);
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const f = e.dataTransfer.files[0];
+  if (f) setFile(f);
+}
+function setFile(f) {
+  _selectedFile = f;
+  document.getElementById('file-info-name').textContent = f.name;
+  document.getElementById('file-info-size').textContent = fmtBytes(f.size);
+  document.getElementById('file-info').classList.add('visible');
+  document.getElementById('upload-result').textContent = '';
+}
+function clearFile() {
+  _selectedFile = null;
+  document.getElementById('file-input').value = '';
+  document.getElementById('file-info').classList.remove('visible');
+  document.getElementById('upload-result').textContent = '';
+}
+
+function fmtBytes(n) {
+  if (n < 1024) return n + ' B';
+  if (n < 1024*1024) return (n/1024).toFixed(1) + ' KB';
+  return (n/(1024*1024)).toFixed(1) + ' MB';
+}
+
+// ── Topology progress tracker ─────────────────────────────────────────────────
+const TOPOLOGY_STEPS = [
+  { key: 'seed',   label: '0 · Seed',                    icon: '🌱' },
+  { key: 'layer1', label: '1 · Reception / jibreel',     icon: '🔴' },
+  { key: 'layer2', label: '2 · Resonance / mikael',      icon: '🟠' },
+  { key: 'layer3', label: '3 · Compatibility / israfeel',icon: '🟡' },
+  { key: 'layer4', label: '4 · Coupling / izra-eel',     icon: '🟢' },
+  { key: 'layer5', label: '5 · Gravity / malik',         icon: '🔵' },
+  { key: 'layer6', label: '6 · Strain / ridwan',         icon: '🟣' },
+  { key: 'layer7', label: '7 · Convergence / throne',    icon: '⚪' },
+];
+
+let _progressTimer = null;
+let _progressSessionId = null;
+let _progressStarted = 0;
+const PROGRESS_TIMEOUT_MS = 120_000; // 2 min max
+
+function renderProgressSteps(completedKeys, outputMap) {
+  outputMap = outputMap || {};
+  const container = document.getElementById('progress-steps');
+  container.innerHTML = TOPOLOGY_STEPS.map(s => {
+    const done = completedKeys.includes(s.key);
+    const active = !done && completedKeys.length > 0 &&
+                   TOPOLOGY_STEPS.indexOf(s) === completedKeys.length;
+    const cls = done ? 'done' : active ? 'active' : 'waiting';
+    const out = outputMap[s.key] || '';
+    return `<div class="step ${cls}">
+      <div class="step-icon">${done ? '✅' : active ? '⏳' : '⬜'} ${s.icon}</div>
+      <div class="step-body">
+        <div class="step-label">${s.label}</div>
+        ${done && out ? `<div class="step-output">${esc(String(out).slice(0, 500))}</div>` : ''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function eventToStepKey(ev) {
+  // Detect which step emitted this event by checking common fields
+  const mind = (ev.mind_name || ev.layer || ev.source || '').toLowerCase();
+  if (mind.includes('seed')) return 'seed';
+  for (let i = 1; i <= 7; i++) if (mind.includes(`layer${i}`) || mind.includes(`layer_${i}`)) return `layer${i}`;
+  // Fallback: check layer_num field
+  const ln = ev.layer_num || ev.LAYER_NUM;
+  if (ln) return `layer${ln}`;
+  return null;
+}
+
+async function pollProgress() {
+  if (!_progressSessionId) return;
+
+  const elapsed = Date.now() - _progressStarted;
+  const summary = document.getElementById('progress-summary');
+
+  try {
+    const data = await apiFetch(`/admin/session/${_progressSessionId}/events`);
+    const events = data.events || [];
+    const completedKeys = [];
+    const outputMap = {};
+
+    for (const ev of events) {
+      const key = eventToStepKey(ev);
+      if (key && !completedKeys.includes(key)) {
+        completedKeys.push(key);
+        outputMap[key] = ev.output || ev.content || ev.response || '';
+      }
+    }
+
+    renderProgressSteps(completedKeys, outputMap);
+
+    // Show final answer as soon as layer7 output arrives
+    const finalOut = outputMap['layer7'] || '';
+    if (finalOut) {
+      document.getElementById('mind-answer').style.display = 'block';
+      document.getElementById('mind-answer-text').textContent = finalOut;
+    }
+
+    const pct = Math.round((completedKeys.length / TOPOLOGY_STEPS.length) * 100);
+    summary.textContent = `${pct}% · ${completedKeys.length}/${TOPOLOGY_STEPS.length} layers · ${(elapsed/1000).toFixed(0)}s elapsed`;
+    summary.style.color = pct === 100 ? 'var(--green)' : 'var(--muted)';
+
+    if (pct === 100) {
+      clearInterval(_progressTimer);
+      _progressTimer = null;
+      summary.textContent = `✓ Complete — all 7 layers processed in ${(elapsed/1000).toFixed(1)}s`;
+      loadStatus(); loadEvents();
+    } else if (elapsed > PROGRESS_TIMEOUT_MS) {
+      clearInterval(_progressTimer);
+      _progressTimer = null;
+      summary.textContent = `⚠ Timed out after ${(elapsed/1000).toFixed(0)}s — ${completedKeys.length} layers reached. Is guidance:corpus populated? Drop files into guidance/inbox/.`;
+      summary.style.color = 'var(--yellow)';
+    }
+  } catch(e) {
+    summary.textContent = 'Poll error: ' + e.message;
+  }
+}
+
+function startProgressTracking(session_id, question) {
+  if (_progressTimer) clearInterval(_progressTimer);
+  _progressSessionId = session_id;
+  _progressStarted = Date.now();
+  const card = document.getElementById('mind-response-card');
+  card.style.display = 'block';
+  card.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  document.getElementById('mind-question').textContent = question ? '❓  ' + question : '(processing…)';
+  document.getElementById('mind-answer').style.display = 'none';
+  document.getElementById('mind-answer-text').textContent = '';
+  renderProgressSteps([], {});
+  document.getElementById('progress-summary').textContent = 'Waiting for seed to pick up message…';
+  _progressTimer = setInterval(pollProgress, 2000);
+  pollProgress();
+}
+
+async function uploadToSeed() {
+  if (!_selectedFile) return;
+  const res = document.getElementById('upload-result');
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Uploading…';
+  const form = new FormData();
+  form.append('file', _selectedFile);
+  try {
+    const data = await fetch('/admin/upload-to-seed', { method: 'POST', body: form }).then(r => {
+      if (!r.ok) return r.json().then(j => { throw new Error(j.detail || r.statusText); });
+      return r.json();
+    });
+    res.style.color = 'var(--green)';
+    res.textContent = `✓ pushed ${fmtNum(data.chars)} chars from "${data.filename}"  ·  session: ${data.session_id}`;
+    document.getElementById('file-info').classList.remove('visible');
+    _selectedFile = null;
+    startProgressTracking(data.session_id, `📄 ${data.filename} (${fmtNum(data.chars)} chars)`);
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = '✗ ' + e.message;
+  }
+}
+
+
+// ── Guidance remove / wipe / save-wisdom ─────────────────────────────────────
+async function removeGuidance(file_id) {
+  if (!confirm('Remove this guidance entry from corpus?')) return;
+  try {
+    const r = await fetch('/admin/guidance/' + encodeURIComponent(file_id), { method: 'DELETE' });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    loadGuidance();
+  } catch(e) {
+    alert('Error: ' + e.message);
+  }
+}
+
+async function saveWisdom() {
+  const btn = event.target;
+  btn.disabled = true;
+  btn.textContent = '⏳ Saving…';
+  try {
+    const data = await fetch('/admin/save-wisdom', { method: 'POST' }).then(r => r.json());
+    btn.textContent = `✓ Saved ${data.saved} wisdom entries`;
+    setTimeout(() => { btn.textContent = '💾 Save Wisdom → Corpus'; btn.disabled = false; loadGuidance(); }, 3000);
+  } catch(e) {
+    btn.textContent = '✗ Error';
+    btn.disabled = false;
+  }
+}
+
+async function confirmWipe(keepWisdom) {
+  const label = keepWisdom ? 'Wipe & Keep Wisdom' : 'FULL WIPE (no recovery)';
+  if (!confirm(`⚠ ${label}\n\nThis will clear all Redis streams and restart the topology.\n\nType OK to confirm.`)) return;
+  const res = document.getElementById('wipe-result');
+  res.style.color = 'var(--muted)';
+  res.textContent = '⏳ Wiping…';
+  try {
+    const data = await fetch('/admin/wipe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ confirm: 'WIPE', keep_wisdom: keepWisdom }),
+    }).then(r => { if (!r.ok) return r.json().then(j => { throw new Error(j.detail); }); return r.json(); });
+    res.style.color = 'var(--green)';
+    res.textContent = `✓ Wiped. Wisdom saved: ${data.kept_wisdom}. Cleared: ${(data.cleared_keys || []).length} keys.`;
+    setTimeout(() => { refreshAll(); }, 1000);
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = '✗ ' + e.message;
+  }
+}
+
+// ── YouTube extractor ─────────────────────────────────────────────────────────
+let _ytJobId = null;
+let _ytPollTimer = null;
+const _ytTrackedSessions = new Set(); // sessions we already started tracking
+
+const YT_STATUS_COLOR = {
+  pending:    'var(--muted)',
+  extracting: 'var(--accent)',
+  seeded:     'var(--green)',
+  no_content: 'var(--yellow)',
+  error:      'var(--red)',
+};
+const YT_STATUS_ICON = {
+  pending:    '⬜',
+  extracting: '⏳',
+  seeded:     '✅',
+  no_content: '⚠️',
+  error:      '❌',
+};
+
+async function ytStart() {
+  const url = document.getElementById('yt-url').value.trim();
+  if (!url) { document.getElementById('yt-result').textContent = 'Please enter a YouTube URL.'; return; }
+
+  const playlist = document.getElementById('yt-playlist').checked;
+  const res = document.getElementById('yt-result');
+  const btn = document.getElementById('yt-btn');
+
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Starting extraction…';
+  btn.disabled = true;
+
+  try {
+    const data = await fetch('/admin/yt/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, playlist }),
+    }).then(r => {
+      if (!r.ok) return r.json().then(j => { throw new Error(j.detail || r.statusText); });
+      return r.json();
+    });
+
+    _ytJobId = data.job_id;
+    _ytTrackedSessions.clear();
+    document.getElementById('yt-job-id').textContent = 'job: ' + data.job_id.slice(0, 8) + '…';
+    document.getElementById('yt-job-panel').style.display = 'block';
+    document.getElementById('yt-video-list').innerHTML = '<div class="empty">Collecting video list…</div>';
+    res.textContent = playlist ? '▶ Playlist job started — processing videos…' : '▶ Extraction started…';
+
+    if (_ytPollTimer) clearInterval(_ytPollTimer);
+    _ytPollTimer = setInterval(ytPoll, 2000);
+    ytPoll();
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = '✗ ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+async function ytPoll() {
+  if (!_ytJobId) return;
+  try {
+    const job = await apiFetch('/admin/yt/job/' + _ytJobId);
+    const btn = document.getElementById('yt-btn');
+    const summary = document.getElementById('yt-job-summary');
+    const res = document.getElementById('yt-result');
+
+    // Update video list
+    const listEl = document.getElementById('yt-video-list');
+    if (job.videos && job.videos.length) {
+      // Auto-track mind progress for each newly seeded video
+      for (const v of job.videos) {
+        if (v.status === 'seeded' && v.session_id && !_ytTrackedSessions.has(v.session_id)) {
+          _ytTrackedSessions.add(v.session_id);
+          startProgressTracking(v.session_id, `▶ ${v.title}`);
+        }
+      }
+
+      listEl.innerHTML = job.videos.map((v, i) => {
+        const icon = YT_STATUS_ICON[v.status] || '⏳';
+        const col  = YT_STATUS_COLOR[v.status] || 'var(--muted)';
+        const chars = v.chars ? ` · ${fmtNum(v.chars)} chars` : '';
+        const sid   = v.session_id ? ` · session: <code style="font-size:10px">${v.session_id.slice(0,8)}…</code>` : '';
+        const errMsg = v.error ? ` — <span style="color:var(--red)">${esc(v.error)}</span>` : '';
+        return `<div class="step" style="border-color:${col}">
+          <div class="step-icon">${icon}</div>
+          <div class="step-body">
+            <div class="step-label">${esc(v.title)}</div>
+            <div class="step-output" style="color:${col}">${v.status}${chars}${errMsg}</div>
+            ${sid ? `<div class="step-output">${sid}</div>` : ''}
+          </div>
+        </div>`;
+      }).join('');
+    } else {
+      listEl.innerHTML = '<div class="empty">Collecting…</div>';
+    }
+
+    // Summary bar
+    const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
+    summary.textContent = `${job.status.toUpperCase()}  ·  ${job.done}/${job.total || '?'} videos  ·  ${pct}%`;
+    summary.style.color = job.status === 'complete' ? 'var(--green)' : 'var(--muted)';
+
+    if (job.status === 'complete') {
+      clearInterval(_ytPollTimer);
+      _ytPollTimer = null;
+      btn.disabled = false;
+      res.style.color = 'var(--green)';
+      res.textContent = `✓ Done — ${job.done} video(s) seeded.`;
+      loadStatus(); loadEvents();
+    } else if (job.status === 'error') {
+      clearInterval(_ytPollTimer);
+      _ytPollTimer = null;
+      btn.disabled = false;
+      res.style.color = 'var(--red)';
+      res.textContent = '✗ ' + (job.error || 'Unknown error');
+    }
+  } catch(e) {
+    // Network hiccup — ignore and retry next tick
+  }
+}
+
+// ── Quran Corpus Loader ───────────────────────────────────────────────────────
+let _quranPollTimer = null;
+
+async function quranLoad() {
+  const btn = document.getElementById('quran-load-btn');
+  const res = document.getElementById('quran-result');
+  btn.disabled = true;
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Starting…';
+  try {
+    const data = await fetch('/admin/quran/load', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ start_from: 0 }),
+    }).then(r => { if (!r.ok) return r.json().then(j => { throw new Error(j.detail || j.msg || r.statusText); }); return r.json(); });
+
+    if (!data.ok) { res.textContent = data.msg; btn.disabled = false; return; }
+    res.textContent = '▶ Loading in revelation order…';
+    document.getElementById('quran-status-bar').style.display = 'block';
+    if (_quranPollTimer) clearInterval(_quranPollTimer);
+    _quranPollTimer = setInterval(quranPoll, 2000);
+    quranPoll();
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = '✗ ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+async function quranStop() {
+  await fetch('/admin/quran/stop', { method: 'POST' });
+  document.getElementById('quran-result').textContent = 'Stopping after current surah…';
+}
+
+async function quranPoll() {
+  try {
+    const job = await apiFetch('/admin/quran/status');
+    const status = job.status || 'idle';
+    document.getElementById('quran-status-text').textContent = status;
+    document.getElementById('quran-status-text').style.color =
+      status === 'complete' ? 'var(--green)' :
+      status === 'error'    ? 'var(--red)' :
+      status === 'stopped'  ? 'var(--yellow)' : 'var(--accent)';
+    document.getElementById('quran-loaded').textContent = fmtNum(job.loaded || 0);
+    document.getElementById('quran-errors').textContent = fmtNum(job.errors || 0);
+    document.getElementById('quran-current').textContent = job.current || '—';
+    const pct = job.total ? Math.round((job.done / job.total) * 100) : 0;
+    document.getElementById('quran-progress').textContent = `${job.done || 0} / ${job.total || 114}  (${pct}%)`;
+    document.getElementById('quran-bar').style.width = pct + '%';
+
+    const done = ['complete', 'stopped', 'error'].includes(status);
+    if (done) {
+      if (_quranPollTimer) { clearInterval(_quranPollTimer); _quranPollTimer = null; }
+      document.getElementById('quran-load-btn').disabled = false;
+      if (status === 'complete') {
+        document.getElementById('quran-result').textContent = `✓ All ${job.loaded} surahs loaded into corpus`;
+        document.getElementById('quran-result').style.color = 'var(--green)';
+        loadGuidance();
+      }
+    }
+  } catch(e) { /* ignore */ }
+}
+
+// ── Knowledge Absorption Training Loop ───────────────────────────────────────
+let _loopPollTimer = null;
+let _loopJobId = null;
+
+async function loopStart() {
+  const maxCycles = parseInt(document.getElementById('loop-max-cycles').value) || 10;
+  const sortBy = document.getElementById('loop-sort-by').value || 'default';
+  const btn = document.getElementById('loop-start-btn');
+  const res = document.getElementById('loop-result');
+  btn.disabled = true;
+  res.style.color = 'var(--muted)';
+  res.textContent = 'Starting…';
+  try {
+    const data = await fetch('/admin/training/start', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ max_cycles: maxCycles, sort_by: sortBy }),
+    }).then(r => { if (!r.ok) return r.json().then(j => { throw new Error(j.detail || r.statusText); }); return r.json(); });
+
+    _loopJobId = data.job_id;
+    document.getElementById('loop-status-panel').style.display = 'block';
+    document.getElementById('loop-stop-btn').style.display = '';
+    document.getElementById('loop-convergence').style.display = 'none';
+    res.textContent = `job: ${data.job_id.slice(0, 8)}…`;
+    if (_loopPollTimer) clearInterval(_loopPollTimer);
+    _loopPollTimer = setInterval(loopPoll, 2500);
+    loopPoll();
+  } catch(e) {
+    res.style.color = 'var(--red)';
+    res.textContent = '✗ ' + e.message;
+    btn.disabled = false;
+  }
+}
+
+async function loopStop() {
+  await fetch('/admin/training/stop', { method: 'POST' });
+  document.getElementById('loop-result').textContent = 'Stopping after current entry…';
+}
+
+async function loopPoll() {
+  try {
+    const data = await apiFetch('/admin/training/status');
+    const jobs = data.jobs || [];
+    const job = _loopJobId ? jobs.find(j => j.job_id === _loopJobId) : jobs[0];
+    if (!job) return;
+
+    const status = job.status || '—';
+    document.getElementById('loop-status-text').textContent = status;
+    document.getElementById('loop-status-text').style.color =
+      status === 'converged' ? 'var(--green)' :
+      status === 'error'     ? 'var(--red)' :
+      status === 'stopped'   ? 'var(--yellow)' : 'var(--purple)';
+
+    document.getElementById('loop-cycle').textContent =
+      job.cycle ? `${job.cycle} / ${job.max_cycles}` : '—';
+    document.getElementById('loop-new-total').textContent = fmtNum(job.total_produced || 0);
+    document.getElementById('loop-timeouts').textContent = fmtNum(job.timeouts_this_cycle || 0);
+    document.getElementById('loop-current-title').textContent = job.current_title || '—';
+    document.getElementById('loop-current-progress').textContent =
+      job.total_this_cycle ? `  (${job.current}/${job.total_this_cycle} this cycle · ${fmtNum(job.new_this_cycle)} new)` : '';
+
+    const done = ['converged', 'complete', 'stopped', 'error'].includes(status);
+    if (done) {
+      if (_loopPollTimer) { clearInterval(_loopPollTimer); _loopPollTimer = null; }
+      document.getElementById('loop-start-btn').disabled = false;
+      document.getElementById('loop-stop-btn').style.display = 'none';
+      if (status === 'converged') {
+        document.getElementById('loop-convergence').style.display = 'block';
+      }
+      if (status !== 'error') loadGuidance();
+    }
+  } catch(e) {
+    // ignore poll errors
+  }
+}
+
+// Auto-resume loop polling if a job is already running
+async function initLoopStatus() {
+  try {
+    const data = await apiFetch('/admin/training/status');
+    const jobs = data.jobs || [];
+    const running = jobs.find(j => j.status === 'running');
+    if (running) {
+      _loopJobId = running.job_id;
+      document.getElementById('loop-status-panel').style.display = 'block';
+      document.getElementById('loop-stop-btn').style.display = '';
+      document.getElementById('loop-start-btn').disabled = true;
+      document.getElementById('loop-result').textContent = `Resuming job ${running.job_id.slice(0,8)}…`;
+      if (_loopPollTimer) clearInterval(_loopPollTimer);
+      _loopPollTimer = setInterval(loopPoll, 2500);
+      loopPoll();
+    }
+    // Also resume quran poll if still running
+    const qs = await apiFetch('/admin/quran/status');
+    if (qs.status === 'running') {
+      document.getElementById('quran-status-bar').style.display = 'block';
+      document.getElementById('quran-load-btn').disabled = true;
+      if (_quranPollTimer) clearInterval(_quranPollTimer);
+      _quranPollTimer = setInterval(quranPoll, 2000);
+      quranPoll();
+    }
+  } catch(e) { /* ignore */ }
+}
+
+// Initial load
+refreshAll();
+startRefresh();
+initLoopStatus();
+</script>
+</body>
+</html>

@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+.venv/
+venv/
+env/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Type checking
+.mypy_cache/
+.dmypy.json
+
+# Linting / security reports
+bandit-report.json
+ruff-report.json
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Secrets (never commit these)
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.jks
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+docker-compose.override.yml
+
+# Data
+data/uploads/
+*.db
+*.sqlite3
+
+# Node / Mobile
+node_modules/
+npm-debug.log*
+yarn-error.log*
+.expo/
+.expo-shared/
+*.jks
+*.keystore
+android/local.properties
+ios/Pods/
+ios/.xcode.env.local
+
+# Logs
+*.log
+logs/
+
+# Alembic (keep versions, ignore env)
+backend/alembic.ini
+!backend/alembic.ini
+
+# Coverage
+coverage/
+*.lcov
+
+# Build outputs
+*.whl
+*.tar.gz

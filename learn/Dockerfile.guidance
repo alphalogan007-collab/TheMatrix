@@ -1,0 +1,5 @@
+FROM python:3.11-slim
+WORKDIR /scanner
+RUN pip install --no-cache-dir httpx redis pypdf
+COPY guidance_scanner.py .
+CMD ["python", "-u", "guidance_scanner.py"]

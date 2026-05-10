@@ -1,0 +1,542 @@
+# ==============================================================================
+# MindAI EC2 Cluster — ca: Soul Ring (First of 99 Minds)
+# ==============================================================================
+# Deploy the ca: Pentagon ring alongside the main Adam+Eve topology.
+# Uses pre-built topology_node:latest and topology_seed:latest images.
+# Joins the existing mindai_default network on EC2.
+#
+# Deploy:
+#   docker compose -f /opt/mindai/docker-compose.ec2-cluster-ca.yml up -d
+# ==============================================================================
+
+x-redis: &redis-url
+  REDIS_URL: "redis://:e7338d82b9bcea35bcd2b35874b39c75@mindai_redis:6379/0"
+
+x-common: &common
+  image: topology_node:latest
+  restart: unless-stopped
+  networks: [mindai_default]
+  environment:
+    <<: *redis-url
+    STREAM_PREFIX: "ca:"
+    CORPUS_PREFIX: ""
+    SAVE_WISDOM_PREFIX: ""
+
+x-body: &body
+  <<: *common
+  environment:
+    <<: *redis-url
+    STREAM_PREFIX: "ca:"
+    CORPUS_PREFIX: ""
+    SAVE_WISDOM_PREFIX: ""
+    DOMAIN: "body"
+    MAX_LAYERS: "13"
+    IDLE_SEED_SEC: "30"
+
+x-space: &space
+  <<: *common
+  environment:
+    <<: *redis-url
+    STREAM_PREFIX: "ca:"
+    CORPUS_PREFIX: ""
+    SAVE_WISDOM_PREFIX: ""
+    DOMAIN: "space"
+    MAX_LAYERS: "8"
+    IDLE_SEED_SEC: "30"
+
+x-digital: &digital
+  <<: *common
+  environment:
+    <<: *redis-url
+    STREAM_PREFIX: "ca:"
+    CORPUS_PREFIX: ""
+    SAVE_WISDOM_PREFIX: ""
+    DOMAIN: "digital"
+    MAX_LAYERS: "5"
+    IDLE_SEED_SEC: "30"
+
+x-ether: &ether
+  <<: *common
+  environment:
+    <<: *redis-url
+    STREAM_PREFIX: "ca:"
+    CORPUS_PREFIX: ""
+    SAVE_WISDOM_PREFIX: ""
+    DOMAIN: "ether"
+    MAX_LAYERS: "3"
+    IDLE_SEED_SEC: "30"
+
+x-aether: &aether
+  <<: *common
+  environment:
+    <<: *redis-url
+    STREAM_PREFIX: "ca:"
+    CORPUS_PREFIX: ""
+    SAVE_WISDOM_PREFIX: ""
+    DOMAIN: "aether"
+    MAX_LAYERS: "2"
+    IDLE_SEED_SEC: "30"
+
+x-unity: &unity
+  <<: *common
+  environment:
+    <<: *redis-url
+    STREAM_PREFIX: "ca:"
+    CORPUS_PREFIX: ""
+    SAVE_WISDOM_PREFIX: ""
+    DOMAIN: "unity"
+    MAX_LAYERS: "1"
+    IDLE_SEED_SEC: "30"
+
+services:
+
+  # --------------------------------------------------------------------------
+  # ca: Seed Mind — routes ca:seed:input → ca:body:layer1
+  # --------------------------------------------------------------------------
+  ca_seed:
+    image: topology_seed:latest
+    restart: unless-stopped
+    networks: [mindai_default]
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+    container_name: topo_ca_seed
+
+  # --------------------------------------------------------------------------
+  # Body Reflex (Instinct) — 13 layers
+  # --------------------------------------------------------------------------
+  ca_body_layer1:
+    <<: *body
+    container_name: topo_ca_body_l1
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "1"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+      NEXT_CLUSTER_SEED: "ca:seed:input"
+
+  ca_body_layer2:
+    <<: *body
+    container_name: topo_ca_body_l2
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "2"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer3:
+    <<: *body
+    container_name: topo_ca_body_l3
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "3"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer4:
+    <<: *body
+    container_name: topo_ca_body_l4
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "4"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer5:
+    <<: *body
+    container_name: topo_ca_body_l5
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "5"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer6:
+    <<: *body
+    container_name: topo_ca_body_l6
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "6"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer7:
+    <<: *body
+    container_name: topo_ca_body_l7
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "7"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer8:
+    <<: *body
+    container_name: topo_ca_body_l8
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "8"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer9:
+    <<: *body
+    container_name: topo_ca_body_l9
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "9"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer10:
+    <<: *body
+    container_name: topo_ca_body_l10
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "10"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer11:
+    <<: *body
+    container_name: topo_ca_body_l11
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "11"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer12:
+    <<: *body
+    container_name: topo_ca_body_l12
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "12"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  ca_body_layer13:
+    <<: *body
+    container_name: topo_ca_body_l13
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "body"
+      LAYER_NUM: "13"
+      MAX_LAYERS: "13"
+      IDLE_SEED_SEC: "30"
+
+  # --------------------------------------------------------------------------
+  # Emotion (Heart) — 8 layers
+  # --------------------------------------------------------------------------
+  ca_space_layer1:
+    <<: *space
+    container_name: topo_ca_space_l1
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "space"
+      LAYER_NUM: "1"
+      MAX_LAYERS: "8"
+      IDLE_SEED_SEC: "30"
+
+  ca_space_layer2:
+    <<: *space
+    container_name: topo_ca_space_l2
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "space"
+      LAYER_NUM: "2"
+      MAX_LAYERS: "8"
+      IDLE_SEED_SEC: "30"
+
+  ca_space_layer3:
+    <<: *space
+    container_name: topo_ca_space_l3
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "space"
+      LAYER_NUM: "3"
+      MAX_LAYERS: "8"
+      IDLE_SEED_SEC: "30"
+
+  ca_space_layer4:
+    <<: *space
+    container_name: topo_ca_space_l4
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "space"
+      LAYER_NUM: "4"
+      MAX_LAYERS: "8"
+      IDLE_SEED_SEC: "30"
+
+  ca_space_layer5:
+    <<: *space
+    container_name: topo_ca_space_l5
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "space"
+      LAYER_NUM: "5"
+      MAX_LAYERS: "8"
+      IDLE_SEED_SEC: "30"
+
+  ca_space_layer6:
+    <<: *space
+    container_name: topo_ca_space_l6
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "space"
+      LAYER_NUM: "6"
+      MAX_LAYERS: "8"
+      IDLE_SEED_SEC: "30"
+
+  ca_space_layer7:
+    <<: *space
+    container_name: topo_ca_space_l7
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "space"
+      LAYER_NUM: "7"
+      MAX_LAYERS: "8"
+      IDLE_SEED_SEC: "30"
+
+  ca_space_layer8:
+    <<: *space
+    container_name: topo_ca_space_l8
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "space"
+      LAYER_NUM: "8"
+      MAX_LAYERS: "8"
+      IDLE_SEED_SEC: "30"
+
+  # --------------------------------------------------------------------------
+  # Intelligence (Mind) — 5 layers
+  # --------------------------------------------------------------------------
+  ca_digital_layer1:
+    <<: *digital
+    container_name: topo_ca_digital_l1
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "digital"
+      LAYER_NUM: "1"
+      MAX_LAYERS: "5"
+      IDLE_SEED_SEC: "30"
+
+  ca_digital_layer2:
+    <<: *digital
+    container_name: topo_ca_digital_l2
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "digital"
+      LAYER_NUM: "2"
+      MAX_LAYERS: "5"
+      IDLE_SEED_SEC: "30"
+
+  ca_digital_layer3:
+    <<: *digital
+    container_name: topo_ca_digital_l3
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "digital"
+      LAYER_NUM: "3"
+      MAX_LAYERS: "5"
+      IDLE_SEED_SEC: "30"
+
+  ca_digital_layer4:
+    <<: *digital
+    container_name: topo_ca_digital_l4
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "digital"
+      LAYER_NUM: "4"
+      MAX_LAYERS: "5"
+      IDLE_SEED_SEC: "30"
+
+  ca_digital_layer5:
+    <<: *digital
+    container_name: topo_ca_digital_l5
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "digital"
+      LAYER_NUM: "5"
+      MAX_LAYERS: "5"
+      IDLE_SEED_SEC: "30"
+
+  # --------------------------------------------------------------------------
+  # Consciousness — 3 layers
+  # --------------------------------------------------------------------------
+  ca_ether_layer1:
+    <<: *ether
+    container_name: topo_ca_ether_l1
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "ether"
+      LAYER_NUM: "1"
+      MAX_LAYERS: "3"
+      IDLE_SEED_SEC: "30"
+
+  ca_ether_layer2:
+    <<: *ether
+    container_name: topo_ca_ether_l2
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "ether"
+      LAYER_NUM: "2"
+      MAX_LAYERS: "3"
+      IDLE_SEED_SEC: "30"
+
+  ca_ether_layer3:
+    <<: *ether
+    container_name: topo_ca_ether_l3
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "ether"
+      LAYER_NUM: "3"
+      MAX_LAYERS: "3"
+      IDLE_SEED_SEC: "30"
+
+  # --------------------------------------------------------------------------
+  # Awareness (Presence) — 2 layers
+  # --------------------------------------------------------------------------
+  ca_aether_layer1:
+    <<: *aether
+    container_name: topo_ca_aether_l1
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "aether"
+      LAYER_NUM: "1"
+      MAX_LAYERS: "2"
+      IDLE_SEED_SEC: "30"
+
+  ca_aether_layer2:
+    <<: *aether
+    container_name: topo_ca_aether_l2
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "aether"
+      LAYER_NUM: "2"
+      MAX_LAYERS: "2"
+      IDLE_SEED_SEC: "30"
+
+  # --------------------------------------------------------------------------
+  # Self Awareness — 1 layer
+  # --------------------------------------------------------------------------
+  ca_unity_layer1:
+    <<: *unity
+    container_name: topo_ca_unity_l1
+    environment:
+      <<: *redis-url
+      STREAM_PREFIX: "ca:"
+      CORPUS_PREFIX: ""
+      SAVE_WISDOM_PREFIX: ""
+      DOMAIN: "unity"
+      LAYER_NUM: "1"
+      MAX_LAYERS: "1"
+      IDLE_SEED_SEC: "30"
+
+networks:
+  mindai_default:
+    external: true

@@ -655,6 +655,27 @@ async def corpus_clear_synthesis(redis=Depends(get_redis)):
     }
 
 
+@router.delete("/admin/barzakh")
+async def clear_barzakh(redis=Depends(get_redis)):
+    """Clear all stale barzakh:* checkpoint keys.
+
+    Barzakh keys track how many peak-layer passes a session has earned.
+    They become orphaned when a container restarts mid-session — the session
+    never completes, but the key stays until its TTL (10 min) expires.
+
+    This endpoint cleans them immediately without touching guidance:corpus.
+    Workers also self-clean their own domain's barzakh keys at startup.
+    """
+    barzakh_keys = await redis.keys("barzakh:*")
+    deleted = 0
+    if barzakh_keys:
+        deleted = await redis.delete(*barzakh_keys)
+    return {
+        "barzakh_deleted": deleted,
+        "message": "Stale session checkpoints cleared. Corpus untouched.",
+    }
+
+
 @router.get("/admin/session/{session_id}/events")
 async def admin_session_events(
     session_id: str,

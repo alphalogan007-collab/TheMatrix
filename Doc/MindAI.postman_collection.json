@@ -383,6 +383,14 @@
           }
         },
         {
+          "name": "DELETE /admin/barzakh",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/admin/barzakh",
+            "description": "Clear all stale barzakh:* session checkpoint keys without touching guidance:corpus. Barzakh keys become orphaned when a worker container restarts mid-session. Workers also self-clean at startup. Use this to clear orphaned keys immediately after a container restart."
+          }
+        },
+        {
           "name": "GET /admin/topology/stream (SSE)",
           "request": {
             "method": "GET",

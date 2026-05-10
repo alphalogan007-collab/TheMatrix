@@ -496,7 +496,7 @@ async def _handle(redis: aioredis.Redis, msg_id: str, fields: dict) -> None:
             barzakh_key = f"barzakh:{STREAM_PREFIX}{DOMAIN}:{session_id[:16]}"
             passes = int(await redis.incr(barzakh_key))
             if passes == 1:
-                await redis.expire(barzakh_key, 3600)  # auto-clean if session dies
+                await redis.expire(barzakh_key, 600)  # auto-clean if session dies (10 min)
             # BARZAKH_THRESHOLD = MAX_LAYERS (set at startup from env).
             # Domain depth IS the reflection count. No override needed.
             if passes < BARZAKH_THRESHOLD:
@@ -880,6 +880,17 @@ async def main() -> None:
         if "BUSYGROUP" not in str(e):
             raise
         log.info("Consumer group already exists")
+
+    # Self-healing: clear stale barzakh keys for this domain on startup.
+    # Barzakh keys are session checkpoints — they become stale when a container
+    # restarts mid-session. With a 1hr TTL they would self-expire, but that means
+    # any session started within that hour gets the wrong pass count.
+    # Clearing at startup is safe: no active sessions exist yet for this worker.
+    stale_pattern = f"barzakh:{STREAM_PREFIX}{DOMAIN}:*"
+    stale_keys = await redis.keys(stale_pattern)
+    if stale_keys:
+        await redis.delete(*stale_keys)
+        log.info("Cleared %d stale barzakh keys for %s%s", len(stale_keys), STREAM_PREFIX, DOMAIN)
 
     log.info("Ready — listening on %s  (inner scaling: %s, max=%d consumers)",
              MY_STREAM, SCALE_KEY, MAX_CONSUMERS)

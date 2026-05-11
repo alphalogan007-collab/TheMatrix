@@ -14,7 +14,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, HttpUrl
 
-from app.dependencies import get_redis
+from app.db.redis_client import get_redis
 
 router = APIRouter(prefix="/navigate", tags=["navigate"])
 

@@ -957,7 +957,7 @@ services:
       VISIT_INTERVAL_SEC: "60"
       REVISIT_HOURS: "24"
       BRIEFING_CAP_CHARS: "2500"
-      SEED_STREAM: "seed:input"
+      SEED_STREAM: "ca:seed:input"
     networks:
       - mindai_default
 

@@ -262,13 +262,7 @@ async def _search_corpus(
         if base_sc == 0:
             continue
         lens_sc  = _score(lens_tokens, content) * 0.4  # lens match bonus
-        # Boost all real-source entries — foundation:*, structure:*, and guidance
-        # file entries (plain hash keys). Auto-generated domain entries (body:*,
-        # space:*, etc.) are echoes and get no boost.
-        _AUTO_PREFIXES = ("body:", "space:", "digital:", "ether:", "aether:", "unity:")
-        is_auto = any(file_id.startswith(p) for p in _AUTO_PREFIXES)
-        real_boost = 1.0 if is_auto else 3.0
-        total_sc = (base_sc + lens_sc) * real_boost
+        total_sc = base_sc + lens_sc
         scored.append((total_sc, file_id, entry))
 
     scored.sort(reverse=True)
@@ -658,7 +652,7 @@ async def _save_wisdom_to_corpus(
     One corpus. Workers write here, workers read from here.
     The mind builds on its own synthesis — this is how learning deepens.
     Foundation entries (foundation:ytheory:*) are always present as the base.
-    Worker synthesis accumulates as synthesis:{domain}:{session}:{id} keys.
+    Worker output accumulates as plain {session_id}:{uuid} keys.
     """
     # Build content from available matches (any source) or the raw output.
     if matches:
@@ -673,15 +667,15 @@ async def _save_wisdom_to_corpus(
         log.debug("Skipping corpus save — content too short")
         return
 
-    key = f"synthesis:{DOMAIN}:{session_id[:16]}:{uuid.uuid4().hex[:6]}"
+    key = f"{session_id[:16]}:{uuid.uuid4().hex[:8]}"
     await redis.hset("guidance:corpus", key, json.dumps({
         "title":   topic[:80],
         "content": content,
-        "source":  f"synthesis:{STREAM_PREFIX or 'self'}:{DOMAIN}:layer{LAYER_NUM}",
+        "source":  f"{STREAM_PREFIX or 'adam'}:{DOMAIN}:layer{LAYER_NUM}",
         "ts":      datetime.now(timezone.utc).isoformat(),
         "chars":   len(content),
     }))
-    log.info("Synthesis → guidance:corpus: %s (%d chars)", key, len(content))
+    log.info("Saved to guidance:corpus: %s (%d chars)", key, len(content))
 
 
 def _save_wisdom_to_disk(session_id: str, topic: str, output: str, direction: str) -> None:

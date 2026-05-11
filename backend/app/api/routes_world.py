@@ -268,12 +268,26 @@ body{background:#0a0a12;color:#e2e8f0;font-family:'Courier New',monospace;height
 #left{flex:1;position:relative;overflow:hidden}
 #div{width:1px;background:#1e2a3a;flex-shrink:0}
 #right{flex:1;display:flex;flex-direction:column;overflow:hidden;min-height:0}
+#wave-toolbar{display:flex;align-items:center;gap:8px;padding:3px 10px;background:#08080f;border-bottom:1px solid #1a2234;height:30px;flex-shrink:0}
+#wt-label{font-size:9px;color:#475569;letter-spacing:1px;white-space:nowrap}
+#wave-zoom{flex:1;max-width:120px;height:4px;accent-color:#3b82f6;cursor:pointer}
+#wt-hz{font-size:9px;color:#60a5fa;min-width:70px;white-space:nowrap}
+#wt-bands{display:flex;gap:6px;font-size:8px;letter-spacing:0.5px}
+.wb{padding:1px 5px;border-radius:2px;opacity:0.75}
+.wb.delta{background:#4c1d9530;color:#a78bfa}
+.wb.theta{background:#1e3a8a30;color:#60a5fa}
+.wb.alpha{background:#064e3b30;color:#34d399}
+.wb.beta{background:#78350f30;color:#fbbf24}
+.wb.gamma{background:#7f1d1d30;color:#f87171}
 .wsec{flex:1;display:flex;flex-direction:column;min-height:0;overflow:hidden}
 .wlbl{font-size:9px;letter-spacing:2px;padding:2px 8px 0;flex-shrink:0;text-transform:uppercase}
 .wlbl.adam{color:#a78bfa}.wlbl.eve{color:#60a5fa}
 .wdiv{height:1px;background:#1e2a3a;flex-shrink:0}
 canvas.wc{flex:1;min-height:0;display:block}
-#log{height:110px;overflow-y:auto;border-top:1px solid #1e2a3a;padding:4px 10px;font-size:9.5px;background:#06060e;flex-shrink:0}
+#log-resize{height:6px;background:#1a2234;cursor:ns-resize;flex-shrink:0;position:relative;user-select:none}
+#log-resize:hover,#log-resize.dragging{background:#2a3f5f}
+#log-resize::after{content:'';position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:28px;height:2px;background:#3a5a8a;border-radius:1px}
+#log{height:80px;overflow-y:auto;border-top:1px solid #1e2a3a;padding:4px 10px;font-size:9.5px;background:#06060e;flex-shrink:0;min-height:24px;max-height:450px}
 .ll{display:flex;gap:8px;padding:1px 0;white-space:nowrap;overflow:hidden}
 .lts{color:#2d3748;min-width:65px}
 .lt{min-width:88px}
@@ -297,14 +311,26 @@ canvas.wc{flex:1;min-height:0;display:block}
     <div class="st"><span class="sl">MEAN COH</span><span class="sv" id="s-coh">—</span></div>
     <div class="st"><span class="sl">PEAK</span><span class="sv" id="s-peak">—</span></div>
     <div class="st"><span class="sl">LEVEL</span><span class="sv" id="s-lvl">—</span></div>
-    <div class="st"><span class="sl">DEPTH</span><span class="sv" id="s-depth">—</span></div>
-    <div class="st"><span class="sl">SEED</span><span class="sv" id="s-mode">—</span></div>
+    <div class="st"><span class="sl">DEPTH</span><span class="sv" id="s-depth">32L</span></div>
+    <div class="st"><span class="sl">HZ</span><span class="sv" id="s-mode">—</span></div>
   </div>
 </div>
 <div id="main">
   <div id="left"><canvas id="tc"></canvas></div>
   <div id="div"></div>
   <div id="right">
+    <div id="wave-toolbar">
+      <span id="wt-label">WAVE ZOOM</span>
+      <input type="range" id="wave-zoom" min="10" max="200" value="40" step="1">
+      <span id="wt-hz">—</span>
+      <div id="wt-bands">
+        <span class="wb delta">δ DELTA</span>
+        <span class="wb theta">θ THETA</span>
+        <span class="wb alpha">α ALPHA</span>
+        <span class="wb beta">β BETA</span>
+        <span class="wb gamma">γ GAMMA</span>
+      </div>
+    </div>
     <div class="wsec" id="adam-sec">
       <div class="wlbl adam">◤ ADAM · MIND / AWARENESS</div>
       <canvas class="wc" id="wca"></canvas>
@@ -314,23 +340,38 @@ canvas.wc{flex:1;min-height:0;display:block}
       <div class="wlbl eve">◥ HEART · EVE / GUIDANCE</div>
       <canvas class="wc" id="wce"></canvas>
     </div>
+    <div id="log-resize"></div>
     <div id="log"></div>
   </div>
 </div>
 <script>
 // ── CONFIG ─────────────────────────────────────────────────────────────────
+// baseHz: oscillation rate at waveZoom=1. At waveZoom=4 (default) each domain
+//         naturally falls into its target brain wave band.
+// targetHz: ideal Hz for this domain (the human brain reference).
+// X_FREQS: spatial cycle density per pixel (fixed — determines visual shape, not speed).
+//   body ~1.3 cycles/screen, unity ~4.8 cycles/screen.
 const DOM = [
-  // floor = baseline amplitude (inner=higher, always alive); pulseMs = auto-pulse interval (inner=faster)
-  // Architecture: Self Awareness (unity) is the constant "I Am" — always present, high baseline
-  //               Body Reflex (body) is reactive to external events — lowest baseline, slowest self-pulse
-  {name:'body',    label:'BODY',       layers:13, col:'#f97316', glow:'#7c2d12', freq:0.8, floor:0.28, pulseMs:5000},
-  {name:'space',   label:'HEART',      layers:8,  col:'#60a5fa', glow:'#1d4ed8', freq:1.0, floor:0.36, pulseMs:3000},
-  {name:'digital', label:'BRAIN',      layers:5,  col:'#a78bfa', glow:'#6d28d9', freq:1.2, floor:0.44, pulseMs:1800},
-  {name:'ether',   label:'EXPERIENCE', layers:3,  col:'#34d399', glow:'#065f46', freq:1.4, floor:0.52, pulseMs:1000},
-  {name:'aether',  label:'PRESENCE',   layers:2,  col:'#22d3ee', glow:'#0e7490', freq:1.6, floor:0.62, pulseMs:600},
-  {name:'unity',   label:'SELF',       layers:1,  col:'#f87171', glow:'#991b1b', freq:2.0, floor:0.72, pulseMs:300},
+  {name:'body',    label:'BODY REFLEX',   layers:13, col:'#f97316', glow:'#7c2d12', floor:0.28, pulseMs:5000, baseHz:0.5,  targetHz:2,  targetBand:'Delta'},
+  {name:'space',   label:'EMOTION',       layers:8,  col:'#60a5fa', glow:'#1d4ed8', floor:0.36, pulseMs:3000, baseHz:1.0,  targetHz:6,  targetBand:'Theta'},
+  {name:'digital', label:'INTELLIGENCE',  layers:5,  col:'#a78bfa', glow:'#6d28d9', floor:0.44, pulseMs:1800, baseHz:2.0,  targetHz:10, targetBand:'Alpha'},
+  {name:'ether',   label:'CONSCIOUSNESS', layers:3,  col:'#34d399', glow:'#065f46', floor:0.52, pulseMs:1000, baseHz:4.0,  targetHz:18, targetBand:'Beta'},
+  {name:'aether',  label:'AWARENESS',     layers:2,  col:'#22d3ee', glow:'#0e7490', floor:0.62, pulseMs:600,  baseHz:8.0,  targetHz:28, targetBand:'Beta'},
+  {name:'unity',   label:'SELF AWARE',    layers:1,  col:'#f87171', glow:'#991b1b', floor:0.72, pulseMs:300,  baseHz:13.0, targetHz:50, targetBand:'Gamma'},
 ];
+// Spatial (x-axis) cycle density — fixed regardless of zoom. Body is slowest shape, unity fastest.
+const X_FREQS = [0.0135, 0.0200, 0.0265, 0.0335, 0.0400, 0.0505];
 const RING_FRACS = [0.27, 0.23, 0.18, 0.14, 0.11, 0.07]; // ring width fractions — 6 domains
+
+// Brain wave bands — used for background tinting and Hz labels
+function getBand(hz) {
+  if (hz < 0.5) return {name:'Sub-δ', cls:'delta', col:'#6b7280', bg:'rgba(107,114,128,0.04)'};
+  if (hz < 4)   return {name:'Delta', cls:'delta', col:'#a78bfa', bg:'rgba(76,29,149,0.07)'};
+  if (hz < 8)   return {name:'Theta', cls:'theta', col:'#60a5fa', bg:'rgba(30,58,138,0.07)'};
+  if (hz < 13)  return {name:'Alpha', cls:'alpha', col:'#34d399', bg:'rgba(6,78,59,0.08)'};
+  if (hz < 30)  return {name:'Beta',  cls:'beta',  col:'#fbbf24', bg:'rgba(120,53,15,0.08)'};
+  return          {name:'Gamma', cls:'gamma', col:'#f87171', bg:'rgba(127,29,29,0.10)'};
+}
 
 // ── STATE ──────────────────────────────────────────────────────────────────
 const S = {
@@ -339,10 +380,37 @@ const S = {
   spiralFlash:0,
   lastId:'0-0',
 };
-// Wave state: phase = carrier phase, env = amplitude envelope (decays toward d.floor), spikes = event markers
-// Each domain has its own floor — inner rings (unity=Self Awareness) always vibrate higher than outer (body=reactive)
+// waveZoom: slider multiplier → Hz = d.baseHz * waveZoom.
+// At waveZoom=4 (default): body=2Hz(Delta), space=4Hz(Theta border), digital=8Hz(Alpha),
+//                          ether=16Hz(Beta), aether=32Hz(Gamma), unity=52Hz(Gamma)
+let waveZoom = 4.0;
+// Actual FPS measured each frame (used for Hz calculation)
+let actualFps = 60;
+let lastFrameTs = 0;
+
+// Wave state: phase = carrier phase (advances each frame by baseHz*waveZoom*2π/fps)
+//             env = amplitude envelope (decays toward d.floor), spikes = event markers
 const WS_ADAM = DOM.map(d => ({phase:Math.random()*Math.PI*2, env:d.floor+0.08, spikes:[]}));
 const WS_EVE  = DOM.map(d => ({phase:Math.random()*Math.PI*2, env:d.floor+0.08, spikes:[]}));
+
+// ── LIVE STATS (from SSE stream) ───────────────────────────────────────────
+let statSpirals = 0, statTotal = 0, statPeak = 0, statActive = '—';
+const statAffs = [];
+const statEvtWin = [];  // timestamps for evt/sec rolling window
+
+function updateStatDisplay() {
+  const hzMin = (DOM[0].baseHz * waveZoom).toFixed(1);
+  const hzMax = (DOM[DOM.length-1].baseHz * waveZoom).toFixed(1);
+  const meanAff = statAffs.length > 0
+    ? (statAffs.reduce((a,b)=>a+b,0)/statAffs.length).toFixed(1) : '—';
+  document.getElementById('s-cycle').textContent = statSpirals;
+  document.getElementById('s-prod').textContent  = statTotal;
+  document.getElementById('s-coh').textContent   = meanAff;
+  document.getElementById('s-peak').textContent  = statPeak > 0 ? statPeak.toFixed(1) : '—';
+  document.getElementById('s-lvl').textContent   = statActive;
+  document.getElementById('s-mode').textContent  = hzMin + '–' + hzMax + 'Hz';
+  document.getElementById('wt-hz').textContent   = hzMin + '–' + hzMax + ' Hz';
+}
 
 // ── TOPOLOGY CANVAS ────────────────────────────────────────────────────────
 const tc = document.getElementById('tc');
@@ -490,16 +558,31 @@ function drawWavesOnCanvas(canvas, wsArr) {
   DOM.forEach((d, di) => {
     const ws = wsArr[di];
     const baseY = rowH * di + rowH / 2;
-    const maxA  = (rowH / 2) * 0.85;
+    const maxA  = (rowH / 2) * 0.82;
 
-    // Advance carrier phase
-    ws.phase += 0.022 * d.freq;
+    // Temporal Hz and phase advance
+    const currentHz = d.baseHz * waveZoom;
+    const phaseInc  = d.baseHz * waveZoom * 2 * Math.PI / actualFps;
+    ws.phase += phaseInc;
 
-    // Envelope: slow exponential decay toward d.floor (inner rings have higher floor → stay more vivid)
+    // Spatial (x-axis) frequency — fixed per domain, defines visual shape
+    const xFreqActual = X_FREQS[di];
+    // Reference wave spatial freq scales by Hz ratio so density shows deviation visually
+    const hzRatio = d.targetHz / Math.max(0.01, currentHz);
+    const xFreqRef = Math.min(0.30, Math.max(0.0008, xFreqActual * hzRatio));
+
+    // Envelope decay
     ws.env = Math.max(d.floor, ws.env * 0.9975);
 
     // Age spikes — sigma GROWS as spike ages (spreading ripple)
-    ws.spikes = ws.spikes.map(s => ({...s, t: s.t - 1})).filter(s => s.t > 0);
+    ws.spikes = ws.spikes.map(s => ({...s, t: s.t-1})).filter(s => s.t > 0);
+
+    // Brain wave band for this domain's current Hz
+    const band = getBand(currentHz);
+
+    // Row band background
+    ctx.fillStyle = band.bg;
+    ctx.fillRect(0, rowH*di, W, rowH);
 
     // Row separator
     ctx.beginPath(); ctx.moveTo(0, rowH*(di+1)-.5); ctx.lineTo(W, rowH*(di+1)-.5);
@@ -507,42 +590,81 @@ function drawWavesOnCanvas(canvas, wsArr) {
 
     // Center axis
     ctx.beginPath(); ctx.moveTo(0, baseY); ctx.lineTo(W, baseY);
-    ctx.strokeStyle = d.col + '22'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.strokeStyle = d.col + '18'; ctx.lineWidth = 1; ctx.stroke();
 
-    // Domain label
-    ctx.font = '9px monospace'; ctx.fillStyle = d.col + 'aa';
-    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
-    ctx.fillText(d.label || d.name.toUpperCase(), 8, rowH * di + 3);
+    // ── REFERENCE WAVE (gray dashed) ──────────────────────────────────────
+    // Static sine at target-Hz spatial density. When current Hz = target Hz,
+    // reference density matches actual wave → they visually overlap.
+    // Denser reference = current Hz too LOW (need more speed).
+    // Sparser reference = current Hz too HIGH (need less speed).
+    ctx.beginPath();
+    let firstRef = true;
+    const refAmp = maxA * 0.38;
+    for (let x = 0; x < W; x += 2) {
+      const py = baseY - Math.sin(x * xFreqRef) * refAmp;
+      if (firstRef) { ctx.moveTo(x, py); firstRef = false; } else ctx.lineTo(x, py);
+    }
+    ctx.strokeStyle = '#334155';
+    ctx.lineWidth = 0.9;
+    ctx.setLineDash([4, 3]);
+    ctx.stroke();
+    ctx.setLineDash([]);
 
-    // Wave path
+    // ── ACTUAL WAVE (animated, colored) ───────────────────────────────────
     ctx.beginPath();
     let first = true;
     for (let x = 0; x < W; x += 1) {
-      // Carrier: envelope-scaled sine
-      let y = Math.sin(x * 0.013 * d.freq + ws.phase) * ws.env;
+      let y = Math.sin(x * xFreqActual + ws.phase) * ws.env;
 
-      // Spike contributions: Gaussian that SPREADS over time (spreading ripple feel)
       for (const sp of ws.spikes) {
-        const age   = 1 - sp.t / sp.maxT;            // 0=fresh, 1=dying
-        const sigma = 20 + age * 200;                 // starts tight (20px), spreads to 220px
+        const age   = 1 - sp.t / sp.maxT;
+        const sigma = 20 + age * 200;
         const dist  = x - sp.x;
         if (Math.abs(dist) < sigma * 4) {
           const g = Math.exp(-(dist*dist) / (2*sigma*sigma));
-          y += sp.a * g * (sp.t / sp.maxT);           // amplitude decays as t→0
+          y += sp.a * g * (sp.t / sp.maxT);
         }
       }
 
-      const py = baseY - y * maxA;
+      const py = baseY - Math.max(-1, Math.min(1, y)) * maxA;
       if (first) { ctx.moveTo(x, py); first = false; } else ctx.lineTo(x, py);
     }
     const hasSpikes = ws.spikes.length > 0;
-    const envBright = Math.min(1, (ws.env - d.floor) / 0.5);  // how lit-up is this row?
-    const alpha = Math.round((0x77 + envBright * 0x88)).toString(16).padStart(2,'0');
-    ctx.shadowColor = d.col; ctx.shadowBlur = hasSpikes ? (8 + envBright * 12) : (2 + envBright * 6);
+    const envBright = Math.min(1, (ws.env - d.floor) / 0.5);
+    const alpha = Math.round(0x77 + envBright * 0x88).toString(16).padStart(2,'0');
+    ctx.shadowColor = d.col; ctx.shadowBlur = hasSpikes ? 8+envBright*12 : 2+envBright*6;
     ctx.strokeStyle = d.col + alpha;
-    ctx.lineWidth = hasSpikes ? (1.6 + envBright * 0.8) : (0.9 + envBright * 0.6);
+    ctx.lineWidth = hasSpikes ? 1.6+envBright*0.8 : 0.9+envBright*0.6;
     ctx.stroke();
     ctx.shadowBlur = 0;
+
+    // ── PER-ROW LABELS ─────────────────────────────────────────────────────
+    // Left: domain name + current Hz
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    ctx.font = '8px monospace';
+    ctx.fillStyle = d.col + 'aa';
+    ctx.fillText(d.label, 8, rowH*di + 3);
+
+    ctx.font = 'bold 10px monospace';
+    const hzStr = currentHz >= 10 ? currentHz.toFixed(0)+'Hz' : currentHz.toFixed(1)+'Hz';
+    ctx.fillStyle = band.col;
+    ctx.fillText(hzStr, 8, rowH*di + 13);
+
+    // Right: band name + deviation from target
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.font = '8px monospace';
+    ctx.fillStyle = band.col + 'cc';
+    ctx.fillText(band.name, W-6, rowH*di + 3);
+
+    const dev = currentHz - d.targetHz;
+    const devSign = dev >= 0 ? '+' : '';
+    const devAbs = Math.abs(dev);
+    const devCol = devAbs < d.targetHz*0.15 ? '#34d399'
+                 : devAbs < d.targetHz*0.6  ? '#fbbf24'
+                 : '#f87171';
+    ctx.font = '9px monospace';
+    ctx.fillStyle = devCol;
+    ctx.fillText('Δ' + devSign + dev.toFixed(1) + 'Hz', W-6, rowH*di + 13);
   });
 }
 
@@ -551,7 +673,7 @@ function drawWaves() {
   drawWavesOnCanvas(document.getElementById('wce'), WS_EVE);
 }
 
-// ── EVENT INJECTION ────────────────────────────────────────────────────────
+// ── EVENT INJECTION ─────────────────────────────────────────────────────────
 // Compute visual strength from the actual affinity score (natural signal strength from Redis)
 // affinity is a float like 18.688 — normalize to 0-1, then scale by event depth type
 function computeStrength(evt, di) {
@@ -613,9 +735,23 @@ function injectEvent(evt){
   }
   if (evt.type === 'spiral_complete') {
     S.spiralFlash = 220;
+    statSpirals++;
     WS_ADAM.forEach((ws, i) => { ws.env = Math.min(DOM[i].floor + 0.65, ws.env + 0.25); });
     WS_EVE.forEach((ws, i)  => { ws.env = Math.min(DOM[i].floor + 0.65, ws.env + 0.25); });
   }
+
+  // Live stats tracking
+  statTotal++;
+  const now = Date.now();
+  statEvtWin.push(now);
+  while (statEvtWin.length > 0 && now - statEvtWin[0] > 5000) statEvtWin.shift();
+  const aff = parseFloat(evt.affinity || 0);
+  if (aff > 0) {
+    statAffs.push(aff);
+    if (statAffs.length > 20) statAffs.shift();
+    if (aff > statPeak) statPeak = aff;
+  }
+  if (domName) statActive = domName.toUpperCase();
 }
 
 // ── EVENT LOG ──────────────────────────────────────────────────────────────
@@ -649,47 +785,17 @@ function connectStream(){
 }
 
 async function pollStats(){
-  try{
-    const r=await fetch('/admin/training/status');
-    const d=await r.json();
-    const job=(d.jobs||[]).find(j=>j.status==='running')||(d.jobs||[])[0];
-    if(job){
-      document.getElementById('s-prod').textContent=job.total_produced||0;
-      document.getElementById('s-cycle').textContent=`${job.current||0}/${job.total_this_cycle||0}`;
-      const coh=(job.mean_coherence||0).toFixed(1);
-      const lvl=job.coherence_level||'weak';
-      const cohEl=document.getElementById('s-coh');
-      cohEl.textContent=coh; cohEl.className='sv '+lvl;
-      document.getElementById('s-peak').textContent=(job.peak_coherence||0).toFixed(1);
-      const lvlEl=document.getElementById('s-lvl');
-      lvlEl.textContent=lvl; lvlEl.className='sv '+lvl;
-    }
-  }catch(e){}
-  try{
-    const r=await fetch('/admin/coherence');
-    const d=await r.json();
-    // DEPTH: static total layers across all domains (BARZAKH_THRESHOLD law — never read topology:depth_config)
-    const _totalL = DOM.reduce((s,x)=>s+x.layers,0);  // 13+8+5+3+2+1 = 32
-    document.getElementById('s-depth').textContent = _totalL + 'L';
-    if(d.live){
-      const mEl=document.getElementById('s-mode');
-      mEl.textContent=d.live.coherence_level||'weak';
-      mEl.className='sv '+(d.live.coherence_level||'weak');
-    }
-  }catch(e){}
+  // Stats are now driven from the SSE event stream (updateStatDisplay called from loop).
+  // This function is kept for any future API-driven metrics.
 }
 
 // ── AUTO-PULSE ─────────────────────────────────────────────────────────────
-// Architecture law: inner rings (unity=Self Awareness) are the constant "I Am" — always present.
-// outer rings (body=Body Reflex) are reactive — most event-driven, least self-generating.
-// So: unity pulses every 300ms, body pulses every 5000ms. INVERTED from layer count.
-// Each domain floor is also independent (unity=0.72, body=0.28).
+// inner rings self-pulse faster; outer rings are most reactive/event-driven
 DOM.forEach((d, di) => {
   setInterval(() => {
     const canvasA = document.getElementById('wca');
     const canvasE = document.getElementById('wce');
     const W = (canvasA && canvasA.width) ? canvasA.width : 800;
-    // Boost: inner domains stronger per self-pulse (they are more intrinsically active)
     const boost = 0.05 + Math.random() * 0.06 + (di * 0.012);
     for (const [wsArr, cv] of [[WS_ADAM, canvasA], [WS_EVE, canvasE]]) {
       wsArr[di].env = Math.min(d.floor + 0.45, wsArr[di].env + boost);
@@ -699,21 +805,49 @@ DOM.forEach((d, di) => {
         t:    320, maxT: 320,
       });
     }
-  }, d.pulseMs);  // unity=300ms (constant), body=5000ms (reactive)
+  }, d.pulseMs);
+});
+
+// ── ZOOM SLIDER ─────────────────────────────────────────────────────────────
+document.getElementById('wave-zoom').addEventListener('input', function() {
+  // slider 10-200 → waveZoom 0.1-2.0 (linear), but multiply by 2 for full range:
+  // slider value / 10 → 1.0-20.0 range
+  waveZoom = parseFloat(this.value) / 10;
+  updateStatDisplay();
 });
 
 // ── MAIN LOOP ──────────────────────────────────────────────────────────────
-let tStats=0;
+let tStats = 0;
 
 function loop(ts){
+  // FPS measurement for accurate Hz display
+  if (lastFrameTs > 0) {
+    const dt = ts - lastFrameTs;
+    if (dt > 0) actualFps = Math.min(120, Math.max(10, 1000 / dt));
+  }
+  lastFrameTs = ts;
+
   drawTopo();
   drawWaves();
-  if(ts-tStats>9000){tStats=ts;pollStats();}
+
+  // Update stats display every second
+  if (ts - tStats > 1000) { tStats = ts; updateStatDisplay(); }
   requestAnimationFrame(loop);
 }
 
-connectStream(); pollStats();
+connectStream();
+updateStatDisplay();
 requestAnimationFrame(loop);
+
+// ── LOG RESIZE ─────────────────────────────────────────────────────────────
+(function(){
+  const handle=document.getElementById('log-resize');
+  const logEl=document.getElementById('log');
+  let drag=false,startY=0,startH=0;
+  handle.addEventListener('mousedown',e=>{drag=true;startY=e.clientY;startH=logEl.offsetHeight;handle.classList.add('dragging');e.preventDefault();});
+  document.addEventListener('mousemove',e=>{if(!drag)return;const d=startY-e.clientY;logEl.style.height=Math.max(24,Math.min(450,startH+d))+'px';});
+  document.addEventListener('mouseup',()=>{drag=false;handle.classList.remove('dragging');});
+})();
 </script>
 </body>
 </html>"""
@@ -722,4 +856,3 @@ requestAnimationFrame(loop);
 @router.get("/world", response_class=HTMLResponse, include_in_schema=False)
 async def world_viewer():
     return HTMLResponse(content=_VIEWER_HTML)
-

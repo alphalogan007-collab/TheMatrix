@@ -25,7 +25,7 @@ x-redis-url: &redis-url
 # ---------------------------------------------------------------------------
 x-body-base: &body-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "body"
@@ -34,7 +34,7 @@ x-body-base: &body-base
 
 x-space-base: &space-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "space"
@@ -43,7 +43,7 @@ x-space-base: &space-base
 
 x-digital-base: &digital-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "digital"
@@ -52,7 +52,7 @@ x-digital-base: &digital-base
 
 x-ether-base: &ether-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "ether"
@@ -61,7 +61,7 @@ x-ether-base: &ether-base
 
 x-aether-base: &aether-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "aether"
@@ -70,7 +70,7 @@ x-aether-base: &aether-base
 
 x-unity-base: &unity-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "unity"
@@ -82,7 +82,7 @@ x-unity-base: &unity-base
 # ---------------------------------------------------------------------------
 x-p-body-base: &p-body-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "body"
@@ -93,7 +93,7 @@ x-p-body-base: &p-body-base
 
 x-p-space-base: &p-space-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "space"
@@ -104,7 +104,7 @@ x-p-space-base: &p-space-base
 
 x-p-digital-base: &p-digital-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "digital"
@@ -115,7 +115,7 @@ x-p-digital-base: &p-digital-base
 
 x-p-ether-base: &p-ether-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "ether"
@@ -126,7 +126,7 @@ x-p-ether-base: &p-ether-base
 
 x-p-aether-base: &p-aether-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "aether"
@@ -137,7 +137,7 @@ x-p-aether-base: &p-aether-base
 
 x-p-unity-base: &p-unity-base
   <<: *common
-  image: topology_node:latest
+  image: thematrix-worker
   environment:
     <<: *redis-url
     DOMAIN: "unity"
@@ -154,7 +154,7 @@ services:
   # ── Foundation Mind (seeds Y Theory into corpus on startup) ──────────────
   foundation_mind:
     <<: *common
-    image: topology_foundation:latest
+    image: thematrix-foundation
     container_name: topo_foundation
     environment:
       <<: *redis-url
@@ -165,7 +165,7 @@ services:
   # Master guidance (auto-generated) is picked up from /guidance/master_guidance/.
   guidance_scanner:
     <<: *common
-    image: topology_guidance:latest
+    image: thematrix-guidance
     container_name: topo_guidance
     environment:
       <<: *redis-url
@@ -206,12 +206,12 @@ services:
   # ── Adam Seed (reads seed:input → seeds body:layer1) ─────────────────────
   seed_mind:
     <<: *common
-    image: topology_seed:latest
+    image: thematrix-seed
     container_name: topo_seed_adam
     environment:
       <<: *redis-url
       STREAM_PREFIX: ""
-      IDLE_SEED_SEC: "30"
+      IDLE_SEED_SEC: "5"
 
   # ── Adam Body (13 layers — Barzakh/instinct) ──────────────────────────────
   body_layer1:
@@ -543,13 +543,13 @@ services:
   # ── Prophet Seed (reads p:seed:input) ────────────────────────────────────
   p_seed_mind:
     <<: *common
-    image: topology_seed:latest
+    image: thematrix-seed
     container_name: topo_seed_prophet
     environment:
       <<: *redis-url
       STREAM_PREFIX: "p:"
       CORPUS_PREFIX: ""
-      IDLE_SEED_SEC: "30"
+      IDLE_SEED_SEC: "5"
 
   # ── Prophet Body (13 layers) ──────────────────────────────────────────────
   p_body_layer1:
@@ -941,6 +941,25 @@ services:
       STREAM_PREFIX: "p:"
       CORPUS_PREFIX: ""
       IDLE_SEED_SEC: "30"
+
+  # ---------------------------------------------------------------------------
+  # Internet Navigator - the mind's field agent.
+  # Goes out to Wikipedia, arXiv, philosophy sites, news feeds.
+  # Understands what it finds and reports back as a field briefing to seed:input.
+  # The oscillation topology (32 layers) processes each briefing into deep synthesis.
+  # ---------------------------------------------------------------------------
+  navigator:
+    image: thematrix-navigator
+    container_name: thematrix_navigator
+    restart: unless-stopped
+    environment:
+      REDIS_URL: "redis://:e7338d82b9bcea35bcd2b35874b39c75@mindai_redis:6379/0"
+      VISIT_INTERVAL_SEC: "60"
+      REVISIT_HOURS: "24"
+      BRIEFING_CAP_CHARS: "2500"
+      SEED_STREAM: "seed:input"
+    networks:
+      - mindai_default
 
 # ==============================================================================
 # Join the existing mindai_default network (where redis/prophet/nginx live)

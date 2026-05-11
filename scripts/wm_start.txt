@@ -1,0 +1,6 @@
+=== Web Mining Start ===
+Enqueuing default queries...
+{"enqueued":32,"total_queue":32}
+Starting drainer...
+{"status":"started"}
+Status:

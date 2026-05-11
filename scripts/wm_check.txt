@@ -1,0 +1,11 @@
+=== Web Mining Check ===
+--- Backend health ---
+{"status":"ok"}
+--- Drain status ---
+
+--- Queue stats ---
+{"queue_depth":24,"claimed":0,"done_count":0,"dead_count":0,"corpus_web_count":0,"drainer":{"running":false,"started_at":null,"queries_done":0,"last_query":null,"last_done_at":null}}
+--- web: keys in corpus ---
+--- web: key count ---
+0
+=== Done ===

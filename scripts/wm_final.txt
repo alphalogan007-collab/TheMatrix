@@ -1,0 +1,13 @@
+=== Web Mining Final Start ===
+--- Current web: key count in corpus ---
+51
+--- Clear old queue state ---
+0
+--- Enqueue 32 default queries (run INSIDE container) ---
+{"enqueued":32,"total_queue":32}
+--- Start drainer (run INSIDE container) ---
+{"status":"started"}
+--- Waiting 90s for Wikipedia queries ---
+--- Drain status (run INSIDE container) ---
+{"running":true,"started_at":"2026-05-11T00:34:15.924088+00:00","queries_done":3,"last_query":"reinforcement learning from human feedback","last_done_at":"2026-05-11T00:36:08.730408+00:00","queue_depth":28}
+--- Queue stats (run INSIDE container) ---

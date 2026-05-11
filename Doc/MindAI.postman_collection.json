@@ -360,6 +360,92 @@
             },
             "description": "Recent guidance consumption events from Redis stream."
           }
+        },
+        {
+          "name": "POST /guidance/upload",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/guidance/upload",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "PDF, TXT, MD, HTML, URL or LINK file (max 200 MB)"
+                }
+              ]
+            },
+            "description": "Upload a file directly into the guidance inbox. The scanner picks it up within 5 seconds, extracts text, stores in guidance:corpus, and moves the file to guidance/completed/. Supported types: .pdf .txt .md .html .url .link. Max 200 MB."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Web Mining — Google/DDG Search",
+      "item": [
+        {
+          "name": "POST /admin/web-mining/enqueue",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/web-mining/enqueue",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"queries\": [\"quantum computing breakthroughs\", \"AI consciousness research\"],\n  \"use_defaults\": false\n}"
+            },
+            "description": "Enqueue search queries for web mining. Set use_defaults=true to add the preset query list (~35 queries). Each query: DuckDuckGo search → fetch top URLs → extract text → write to guidance:corpus."
+          }
+        },
+        {
+          "name": "GET /admin/web-mining",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/web-mining",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Web mining queue stats: queue depth, done count, dead count, corpus web entry count, drainer status."
+          }
+        },
+        {
+          "name": "POST /admin/web-mining/drain/start",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/web-mining/drain/start",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Start the background web mining drainer. Pops queries from queue, searches DuckDuckGo, fetches top result pages, writes to guidance:corpus."
+          }
+        },
+        {
+          "name": "POST /admin/web-mining/drain/stop",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/admin/web-mining/drain/stop",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Stop the background web mining drainer."
+          }
+        },
+        {
+          "name": "GET /admin/web-mining/drain/status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/admin/web-mining/drain/status",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Drainer status: running, started_at, queries_done, last_query, queue_depth."
+          }
+        },
+        {
+          "name": "DELETE /admin/web-mining",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/admin/web-mining",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Clear the web mining queue (queue + claimed + error counts)."
+          }
         }
       ]
     },
@@ -397,6 +483,88 @@
             "url": "{{base_url}}/admin/topology/stream",
             "header": [{ "key": "Accept", "value": "text/event-stream" }],
             "description": "SSE stream of live topology pulse events from spirit:events (Adam ring), p:spirit:events (Eve ring), and ca:spirit:events (ca: ring). The Mind View UI subscribes here instead of /events which reads the old in-process bus. Each event has: type, ring, from, pattern, direction, domain, layer, ts."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Navigate — Internet Navigator",
+      "item": [
+        {
+          "name": "POST /navigate/queue",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/navigate/queue",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"url\": \"https://en.wikipedia.org/wiki/Quantum_consciousness\",\n  \"label\": \"quantum_consciousness\",\n  \"intent\": \"Understand quantum theories of consciousness for mind substrate resonance\"\n}"
+            },
+            "description": "Queue a URL for the navigator to visit immediately (LPUSH to navigator:queue). The navigator picks it up within VISIT_INTERVAL_SEC seconds, visits the URL, builds a FIELD BRIEFING, and pushes it to seed:input for 32-layer topology processing."
+          }
+        },
+        {
+          "name": "GET /navigate/status",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/navigate/status",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Navigator status: queue depth (URLs waiting to be visited), total configured targets, on-cooldown count, and the 3 most recent visit log entries."
+          }
+        },
+        {
+          "name": "GET /navigate/log",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/navigate/log?count=20",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Full visit history from navigator:log stream. Default 20 entries, max 100. Each entry includes label, url, title, success flag, error if any, and session_id of the briefing seeded into the topology."
+          }
+        },
+        {
+          "name": "GET /navigate/targets",
+          "request": {
+            "method": "GET",
+            "url": "{{base_url}}/navigate/targets",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "All configured permanent targets with their current cooldown status, priority, revisit interval, and last visit time."
+          }
+        },
+        {
+          "name": "POST /navigate/targets",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/navigate/targets",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{access_token}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"stanford_consciousness\",\n  \"url\": \"https://plato.stanford.edu/entries/consciousness/\",\n  \"type\": \"html\",\n  \"revisit_hours\": 48,\n  \"priority\": 8,\n  \"intent\": \"Track the Stanford Encyclopedia's philosophical account of consciousness\"\n}"
+            },
+            "description": "Add or update a permanent navigator target. label=unique key, type=wikipedia|rss|html, priority=1-10 (higher = visited first), revisit_hours=cooldown between visits, intent=why the mind should visit this."
+          }
+        },
+        {
+          "name": "DELETE /navigate/targets/{label}",
+          "request": {
+            "method": "DELETE",
+            "url": "{{base_url}}/navigate/targets/stanford_consciousness",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Remove a permanent target from the navigator. Does not affect visit history."
+          }
+        },
+        {
+          "name": "POST /navigate/targets/{label}/visit-now",
+          "request": {
+            "method": "POST",
+            "url": "{{base_url}}/navigate/targets/quantum_mind/visit-now",
+            "header": [{ "key": "Authorization", "value": "Bearer {{access_token}}" }],
+            "description": "Clear the cooldown for a target and force it to the front of the visit queue. The navigator will visit it within VISIT_INTERVAL_SEC seconds regardless of when it was last visited."
           }
         }
       ]

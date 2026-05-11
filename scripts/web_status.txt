@@ -1,0 +1,38 @@
+=== NGINX ===
+mindai_nginx | Up 4 hours (healthy) | 0.0.0.0:80->80/tcp, [::]:80->80/tcp, 0.0.0.0:443->443/tcp, [::]:443->443/tcp
+
+=== PROPHET ===
+mindai_prophet | Up About an hour (healthy) | 127.0.0.1:8000->8000/tcp
+
+=== REDIS ===
+mindai_redis | Up 4 hours (healthy)
+
+=== PORT 80/443 LISTENING ===
+LISTEN 0      4096         0.0.0.0:80        0.0.0.0:*          
+LISTEN 0      4096         0.0.0.0:443       0.0.0.0:*          
+LISTEN 0      4096            [::]:80           [::]:*          
+LISTEN 0      4096            [::]:443          [::]:*          
+
+=== NGINX LOGS (last 10) ===
+2026/05/11 01:37:01 [error] 21#21: *3106 connect() failed (111: Connection refused) while connecting to upstream, client: 47.54.7.222, server: socialfork.ca, request: "GET /admin/mind/broadcast HTTP/1.1", upstream: "http://172.18.0.27:8000/admin/mind/broadcast", host: "socialfork.ca", referrer: "https://socialfork.ca/companion"
+47.54.7.222 - - [11/May/2026:01:37:01 +0000] "GET /admin/mind/broadcast HTTP/1.1" 502 559 "https://socialfork.ca/companion" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "-"
+2026/05/11 01:37:12 [error] 21#21: *3106 connect() failed (111: Connection refused) while connecting to upstream, client: 47.54.7.222, server: socialfork.ca, request: "GET /admin/mind/broadcast HTTP/1.1", upstream: "http://172.18.0.27:8000/admin/mind/broadcast", host: "socialfork.ca", referrer: "https://socialfork.ca/companion"
+47.54.7.222 - - [11/May/2026:01:37:12 +0000] "GET /admin/mind/broadcast HTTP/1.1" 502 559 "https://socialfork.ca/companion" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "-"
+2026/05/11 01:37:23 [error] 21#21: *3106 connect() failed (111: Connection refused) while connecting to upstream, client: 47.54.7.222, server: socialfork.ca, request: "GET /admin/mind/broadcast HTTP/1.1", upstream: "http://172.18.0.27:8000/admin/mind/broadcast", host: "socialfork.ca", referrer: "https://socialfork.ca/companion"
+47.54.7.222 - - [11/May/2026:01:37:23 +0000] "GET /admin/mind/broadcast HTTP/1.1" 502 559 "https://socialfork.ca/companion" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "-"
+2026/05/11 01:37:34 [error] 21#21: *3106 connect() failed (111: Connection refused) while connecting to upstream, client: 47.54.7.222, server: socialfork.ca, request: "GET /admin/mind/broadcast HTTP/1.1", upstream: "http://172.18.0.27:8000/admin/mind/broadcast", host: "socialfork.ca", referrer: "https://socialfork.ca/companion"
+47.54.7.222 - - [11/May/2026:01:37:34 +0000] "GET /admin/mind/broadcast HTTP/1.1" 502 559 "https://socialfork.ca/companion" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "-"
+2026/05/11 01:37:45 [error] 21#21: *3106 connect() failed (111: Connection refused) while connecting to upstream, client: 47.54.7.222, server: socialfork.ca, request: "GET /admin/mind/broadcast HTTP/1.1", upstream: "http://172.18.0.27:8000/admin/mind/broadcast", host: "socialfork.ca", referrer: "https://socialfork.ca/companion"
+47.54.7.222 - - [11/May/2026:01:37:45 +0000] "GET /admin/mind/broadcast HTTP/1.1" 502 559 "https://socialfork.ca/companion" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/147.0.0.0 Safari/537.36" "-"
+
+=== PROPHET LOGS (last 10) ===
+INFO:     127.0.0.1:43224 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:35490 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:37120 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:51028 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49736 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:59718 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:44128 - "GET /health HTTP/1.1" 200 OK
+INFO:     172.18.0.1:59806 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:41126 - "GET /health HTTP/1.1" 200 OK
+INFO:     127.0.0.1:49972 - "GET /health HTTP/1.1" 200 OK

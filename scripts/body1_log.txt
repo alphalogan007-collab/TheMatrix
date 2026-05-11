@@ -1,0 +1,55 @@
+2026-05-10 23:54:59,382 [BODY/L1/Red] INFO Layer output: 200 chars, 8 guidance match(es)
+2026-05-10 23:55:00,975 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-10 23:55:01,563 [BODY/L1/Red] INFO Processing: topic='corpus:auto:foundation:ytheory:base_delta_model: Reality is ' dir=descending session=18cf654d
+2026-05-10 23:55:33,518 [BODY/L1/Red] INFO Layer output: 275 chars, 8 guidance match(es)
+2026-05-10 23:55:35,168 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-10 23:55:35,876 [BODY/L1/Red] INFO Processing: topic='corpus:auto:58b504e364f3e833dbeff8d72c7d2280: EVOLUTION - Fr' dir=descending session=0554d3e1
+2026-05-10 23:56:08,379 [BODY/L1/Red] INFO Layer output: 245 chars, 8 guidance match(es)
+2026-05-10 23:56:10,137 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-10 23:56:38,545 [BODY/L1/Red] INFO Processing: topic='corpus:auto:foundation:ytheory:evolution_through_col: Wisdom' dir=descending session=9d34977d
+2026-05-10 23:57:07,650 [BODY/L1/Red] INFO Layer output: 164 chars, 8 guidance match(es)
+2026-05-10 23:57:17,002 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-10 23:57:17,648 [BODY/L1/Red] INFO Processing: topic='corpus:auto:foundation:ytheory:identity_as_pattern: Every en' dir=descending session=20b251aa
+2026-05-10 23:57:50,624 [BODY/L1/Red] INFO Layer output: 221 chars, 8 guidance match(es)
+2026-05-10 23:57:52,273 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-10 23:57:52,819 [BODY/L1/Red] INFO Processing: topic='corpus:auto:58b504e364f3e833dbeff8d72c7d2280: EVOLUTION - Fr' dir=descending session=64bee0bf
+2026-05-10 23:58:25,289 [BODY/L1/Red] INFO Layer output: 245 chars, 8 guidance match(es)
+2026-05-10 23:58:27,642 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-10 23:58:28,233 [BODY/L1/Red] INFO Processing: topic='corpus:auto:foundation:ytheory:mind_hierarchy: Minds are org' dir=descending session=875954b9
+2026-05-10 23:59:02,713 [BODY/L1/Red] INFO Layer output: 200 chars, 8 guidance match(es)
+2026-05-10 23:59:04,046 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-10 23:59:04,823 [BODY/L1/Red] INFO Processing: topic='corpus:auto:foundation:ytheory:identity_as_pattern: Every en' dir=descending session=72835b42
+2026-05-10 23:59:38,247 [BODY/L1/Red] INFO Layer output: 221 chars, 8 guidance match(es)
+2026-05-10 23:59:39,931 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-11 00:00:10,376 [BODY/L1/Red] INFO Processing: topic='corpus:auto:foundation:purpose:mission: This mind exists to ' dir=descending session=298b6617
+2026-05-11 00:00:40,069 [BODY/L1/Red] INFO Layer output: 222 chars, 8 guidance match(es)
+2026-05-11 00:00:49,517 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-11 00:00:50,517 [BODY/L1/Red] INFO Processing: topic='corpus:auto:foundation:purpose:why: We build this because hu' dir=descending session=ee13d2ac
+2026-05-11 00:01:23,500 [BODY/L1/Red] INFO Layer output: 441 chars, 8 guidance match(es)
+2026-05-11 00:01:24,684 [BODY/L1/Red] INFO -> body:layer2 [descending]
+2026-05-11 00:01:26,044 [BODY/L1/Red] INFO Processing: topic='corpus:auto:61e46937e736f71268c0034769f9b447: FOURTH EDITION' dir=descending session=462dde4b
+0
+8001
+barzakh:e:body:be77be5ca71f4820
+barzakh:isa:body:e4fafb20b35d49e5
+barzakh:e:body:346f96a6591f4873
+barzakh:p:body:874c2419e198494c
+barzakh:e:body:52098af813d943d9
+barzakh:musa:body:133bba704a5b4d8a
+barzakh:nuh:body:907ef8571bc04c72
+barzakh:body:b067229f10384438
+barzakh:ibrahim:body:e8fcfcd77c544bba
+barzakh:body:7aa4d729607f462b
+barzakh:nuh:body:24b80764d43d4d7d
+barzakh:p:body:62b9df5e743743ff
+barzakh:ca:body:7c6805c7ea9c46e8
+barzakh:ca:body:5e04f557671841b3
+barzakh:isa:body:75eefff9b7a84ec7
+barzakh:p:body:4f01860128d34d34
+barzakh:ibrahim:body:db80b8c3bc254101
+barzakh:e:body:f7a540c7649f47f6
+barzakh:nuh:body:5eac6849e5c6477c
+barzakh:muhammad:body:ab6e1d3b64df4351
+barzakh:body:0e110a59ffb94d85
+barzakh:muhammad:body:945f08aaa23e4f7e
+barzakh:ca:body:8293a819fa5841e3

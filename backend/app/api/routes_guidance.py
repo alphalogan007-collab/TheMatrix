@@ -1,19 +1,24 @@
-"""routes_guidance.py — Guidance corpus read endpoints.
+"""routes_guidance.py — Guidance corpus read endpoints + upload.
 
 All Redis-only. No DB. Works in topology-only mode.
 
-GET /guidance/list         — list all consumed files (metadata)
-GET /guidance/{file_id}    — full content of one file
-GET /guidance/events       — recent consumption events from Redis stream
+GET  /guidance/list         — list all consumed files (metadata)
+GET  /guidance/{file_id}    — full content of one file
+GET  /guidance/events       — recent consumption events from Redis stream
+POST /guidance/upload       — drop a file into guidance inbox for the scanner
 """
 
 from __future__ import annotations
 
 import json
+import os
+import shutil
+from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, UploadFile, File
 
+from app.config import get_settings
 from app.db.redis_client import get_redis
 
 router = APIRouter()
@@ -66,3 +71,47 @@ async def get_guidance_events(
     for msg_id, fields in results:
         events.append({"msg_id": msg_id, **fields})
     return events
+
+
+@router.post("/guidance/upload")
+async def upload_guidance(
+    file: UploadFile = File(...),
+    settings=Depends(get_settings),
+):
+    """Upload a file to the guidance inbox. The scanner picks it up within 5s.
+
+    Supported: .pdf, .txt, .md, .html, .url, .link
+    Max size: 200 MB
+    """
+    ALLOWED_EXTENSIONS = {".pdf", ".txt", ".md", ".html", ".htm", ".url", ".link"}
+    MAX_BYTES = 200 * 1024 * 1024  # 200 MB
+
+    suffix = Path(file.filename or "").suffix.lower()
+    if suffix not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=415,
+            detail=f"Unsupported file type '{suffix}'. Allowed: {sorted(ALLOWED_EXTENSIONS)}",
+        )
+
+    inbox = Path(settings.guidance_inbox)
+    inbox.mkdir(parents=True, exist_ok=True)
+    dest = inbox / (file.filename or "upload.bin")
+
+    # Stream to disk with size cap
+    bytes_written = 0
+    with dest.open("wb") as out:
+        while chunk := await file.read(1024 * 1024):  # 1 MB chunks
+            bytes_written += len(chunk)
+            if bytes_written > MAX_BYTES:
+                out.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(status_code=413, detail="File too large (max 200 MB)")
+            out.write(chunk)
+
+    return {
+        "status": "queued",
+        "filename": file.filename,
+        "bytes": bytes_written,
+        "inbox": str(inbox),
+        "message": "File saved to guidance inbox. Scanner will process it within 5 seconds.",
+    }

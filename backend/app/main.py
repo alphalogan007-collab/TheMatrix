@@ -43,10 +43,12 @@ from app.api import (
     routes_companion,
     routes_yt_queue,
     routes_wiki_queue,
+    routes_web_mining,
     routes_wisdom_sync,
     routes_mind,
     routes_source_seed,
     routes_mind_ask,
+    routes_navigate,
 )
 logger = structlog.get_logger()
 settings = get_settings()
@@ -156,10 +158,12 @@ app.include_router(routes_world.router,         tags=["world"])
 app.include_router(routes_companion.router,     tags=["companion"])
 app.include_router(routes_yt_queue.router,      tags=["yt-queue"])
 app.include_router(routes_wiki_queue.router,    tags=["wiki-queue"])
+app.include_router(routes_web_mining.router,    tags=["web-mining"])
 app.include_router(routes_mind_ask.router,      tags=["mind-ask"])
 app.include_router(routes_wisdom_sync.router,   tags=["wisdom-sync"])
 app.include_router(routes_mind.router,          tags=["mind"])
 app.include_router(routes_source_seed.router,   tags=["source-seed"])
+app.include_router(routes_navigate.router,      tags=["navigate"])
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

@@ -1,0 +1,14 @@
+=== Deploying fixed seed_mind.py ===
+--- Seed containers ---
+NAMES                       STATUS
+thematrix-e_seed-2          Up About an hour
+thematrix-musa_seed-1       Up About an hour
+thematrix-seed-1            Up About an hour
+thematrix-isa_seed-1        Up About an hour
+thematrix-muhammad_seed-1   Up About an hour
+thematrix-ibrahim_seed-1    Up About an hour
+thematrix-nuh_seed-1        Up About an hour
+thematrix-seed-2            Up About an hour
+thematrix-e_seed-1          Up About an hour
+thematrix-p_seed-1          Up About an hour
+topo_ca_seed                Up About an hour

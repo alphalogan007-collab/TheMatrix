@@ -51,7 +51,7 @@ CONSUMER_NAME = f"seed_{uuid.uuid4().hex[:8]}"
 # of silence the mind starts a new oscillation from its own knowledge.
 # The corpus is the air. The spiral is the breath cycle.
 # IDLE_SEED_SEC=0 means breathe as fast as spirals complete.
-IDLE_SEED_SEC: float = float(os.environ.get("IDLE_SEED_SEC", "30"))
+IDLE_SEED_SEC: float = float(os.environ.get("IDLE_SEED_SEC", "5"))
 _last_auto_seed_ts: float = 0.0
 # Corpus access gate: "" = full corpus (Body/Eve, world-facing).
 # "wisdom_" = only distilled wisdom keys (prophet/prophetic rings — self-reflect only).
@@ -425,12 +425,15 @@ async def _auto_seed(redis: aioredis.Redis) -> None:
     _last_auto_seed_ts = now
 
     try:
-        # Sample 40 random keys — breathe from primary sources first:
-        # Quran + YTheory + MachineLanguage.
-        # Never re-breathe auto-generated worker output (body:*, space:*, etc.) —
-        # that would create an echo loop where workers feed themselves.
+        # Sample 40 random keys — breathe from all real knowledge in corpus.
+        # Synthesis entries (wisdom returned from completed spirals) ARE included —
+        # they represent the source's accumulated understanding and change its
+        # orientation. The delta gate (_compute_delta) is the correct gatekeeper:
+        # if synthesis content is already fully resonant, delta_query="" → skip.
+        # Only genuinely novel synthesis triggers a new spiral.
+        # Structural/meta keys are excluded — they are identity, not content.
         _AUTO_PREFIXES = ("body:", "space:", "digital:", "ether:", "aether:", "unity:",
-                          "structure:", "self_knowledge", "wiki:")
+                          "structure:")
         keys = await redis.hrandfield("guidance:corpus", 40)
         if not keys:
             log.debug("Auto-seed: corpus empty, skipping")

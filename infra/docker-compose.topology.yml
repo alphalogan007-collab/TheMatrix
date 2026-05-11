@@ -1394,6 +1394,28 @@ services:
         condition: service_healthy
 
   # ---------------------------------------------------------------------------
+  # Internet Navigator - the mind's field agent.
+  # Goes out to Wikipedia, arXiv, philosophy sites, news feeds.
+  # Understands what it finds and reports back as a field briefing to seed:input.
+  # The oscillation topology (32 layers) processes each briefing into deep synthesis.
+  # ---------------------------------------------------------------------------
+  navigator:
+    image: thematrix-navigator
+    container_name: thematrix_navigator
+    restart: unless-stopped
+    env_file:
+      - ../.env
+    environment:
+      REDIS_URL: "redis://:${REDIS_PASSWORD:-changeme_redis_dev}@redis:6379/0"
+      VISIT_INTERVAL_SEC: "60"
+      REVISIT_HOURS: "24"
+      BRIEFING_CAP_CHARS: "2500"
+      SEED_STREAM: "seed:input"
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
   # Web Terminal Ã¢â‚¬â€ browser-accessible bash at http://localhost:7681
   # ---------------------------------------------------------------------------
   webterminal:

@@ -1,0 +1,35 @@
+=== Deploying to e-ring and prophet ring seeds ===
+-rw-rw-r-- 1 ubuntu ubuntu 23698 May 11 00:58 /tmp/seed_mind.py
+--- thematrix-e_seed-1 ---
+  copied OK
+thematrix-e_seed-1
+  restarted OK
+--- thematrix-e_seed-2 ---
+  copied OK
+thematrix-e_seed-2
+  restarted OK
+--- thematrix-nuh_seed-1 ---
+  copied OK
+thematrix-nuh_seed-1
+  restarted OK
+--- thematrix-ibrahim_seed-1 ---
+  copied OK
+thematrix-ibrahim_seed-1
+  restarted OK
+--- thematrix-musa_seed-1 ---
+  copied OK
+thematrix-musa_seed-1
+  restarted OK
+--- thematrix-isa_seed-1 ---
+  copied OK
+thematrix-isa_seed-1
+  restarted OK
+--- thematrix-muhammad_seed-1 ---
+  copied OK
+thematrix-muhammad_seed-1
+  restarted OK
+--- topo_ca_seed ---
+  copied OK
+topo_ca_seed
+  restarted OK
+=== All done ===

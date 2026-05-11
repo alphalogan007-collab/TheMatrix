@@ -13,6 +13,7 @@ Supported formats:
   .txt / .md  — read directly
   .url        — URL file (plain URL or Windows [InternetShortcut] format)
   .html       — HTML stripped to plain text
+  .py         — Python source files (read as plain text — enables self-reflection)
 
 Drop files in:    guidance/inbox/
 Processed go to:  guidance/completed/YYYY-MM-DD/
@@ -52,16 +53,16 @@ INBOX      = Path(os.environ.get("GUIDANCE_INBOX",      "/guidance/inbox"))
 COMPLETED  = Path(os.environ.get("GUIDANCE_COMPLETED",  "/guidance/completed"))
 POLL_SECS  = float(os.environ.get("GUIDANCE_POLL_SECS", "5"))
 
-# GUIDANCE_SOURCES — comma-separated list of read-only source folders.
+# GUIDANCE_SOURCES — colon-separated list of read-only source folders (Unix PATH convention).
 # Files here are NEVER moved — they are permanent mounts (Y-Theory, Quran, etc.).
 # The dedup index (guidance:index) prevents double-ingestion across restarts.
 SOURCES: list[Path] = [
     Path(s.strip())
-    for s in os.environ.get("GUIDANCE_SOURCES", "").split(",")
+    for s in os.environ.get("GUIDANCE_SOURCES", "").split(":")
     if s.strip()
 ]
 
-SUPPORTED = {".pdf", ".txt", ".md", ".url", ".link", ".html"}
+SUPPORTED = {".pdf", ".txt", ".md", ".url", ".link", ".html", ".py"}
 
 logging.basicConfig(
     level=logging.INFO,

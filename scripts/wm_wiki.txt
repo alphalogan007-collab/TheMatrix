@@ -1,0 +1,21 @@
+=== Wikipedia Web Mining Start ===
+--- Waiting for backend to be healthy ---
+
+--- Stop old drainer (if any) ---
+
+--- Clear old queue ---
+2
+Cleared
+
+--- Enqueue 32 default queries ---
+
+--- Start Wikipedia drainer ---
+
+--- Waiting 60s for Wikipedia queries to complete ---
+--- Drain status ---
+
+--- Queue depth ---
+0
+--- Done count ---
+0
+--- web: keys in corpus ---

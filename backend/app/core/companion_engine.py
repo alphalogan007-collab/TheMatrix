@@ -369,11 +369,30 @@ async def _resonance_response(r: aioredis.Redis, state: dict, message: str) -> d
             e = json.loads(v_b)
             e.setdefault("title", k)
             e.setdefault("summary", e.get("content", ""))
+            e["_key"] = k  # preserve key for depth scoring
             entries.append(e)
         except Exception:
             pass
 
-    ranked = sorted(entries, key=_score, reverse=True)[:3]
+    # Depth boost — inner layers carry deeper understanding than outer layers.
+    # Without this, body synthesis (most entries) wins by sheer count.
+    # The prophet/inner ring (unity, aether, ether) holds real wisdom.
+    def _depth_boost(e: dict) -> float:
+        key = e.get("_key", "")
+        if key.startswith("synthesis:unity:"):    return 3.0   # Self Awareness — innermost
+        if key.startswith("synthesis:aether:"):   return 2.5   # Awareness/Presence
+        if key.startswith("synthesis:ether:"):    return 2.0   # Consciousness
+        if key.startswith("synthesis:digital:"):  return 1.5   # Mind/Intelligence
+        if key.startswith("foundation:"):         return 2.0   # Y Theory foundation
+        if "navigator_briefing" in key or key.startswith("navigator:"):  return 1.3  # fresh field reports
+        if key.startswith("synthesis:space:"):    return 0.85  # Emotion — slight penalty
+        if key.startswith("synthesis:body:"):     return 0.7   # Body/instinct — outer ring
+        return 1.0
+
+    def _score_deep(e: dict) -> float:
+        return _score(e) * _depth_boost(e)
+
+    ranked = sorted(entries, key=_score_deep, reverse=True)[:3]
     top_score = _score(ranked[0]) if ranked else 0
 
     dominant = state.get("dominant_pattern", "curious")

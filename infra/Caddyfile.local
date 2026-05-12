@@ -1,17 +1,43 @@
 # ==============================================================================
 # Caddyfile.local — Local development reverse proxy
-# Plain HTTP — Meta Quest Browser supports WebXR on local HTTP (LAN only)
-# All services accessible from your Meta Quest on the same WiFi network.
+# HTTPS via Caddy internal CA — required for WebXR on Meta Quest Browser.
+#
+# First-time Quest setup (one-time only):
+#   1. On Quest Browser go to:  http://192.168.2.93/ca.crt
+#      → downloads TheMatrix-CA.crt
+#   2. Quest will prompt to install the certificate → tap Install
+#   3. From now on use:  https://192.168.2.93/vr
+#
+# OR skip cert install: go to https://192.168.2.93/vr, tap Advanced →
+# Proceed to 192.168.2.93 (unsafe) — WebXR still works.
 # ==============================================================================
 
-# Disable HTTPS auto-provision for local dev
 {
     auto_https off
     admin off
 }
 
-# Main entry point — serves everything on port 80
+# ── HTTP :80 — serves CA cert for Quest installation, redirects rest to HTTPS
 :80 {
+
+    # Serve the Caddy internal root CA cert so Quest can install and trust it.
+    # The cert lives at /data/caddy/pki/authorities/local/root.crt (persisted volume).
+    handle /ca.crt {
+        root * /data/caddy/pki/authorities/local
+        rewrite * /root.crt
+        file_server
+        header Content-Type "application/x-x509-ca-cert"
+        header Content-Disposition "attachment; filename=TheMatrix-CA.crt"
+    }
+
+    # Everything else → HTTPS
+    redir https://{host}{uri} 308
+}
+
+# ── HTTPS — secure context required for WebXR immersive VR mode
+# Explicit site address (not just :443) so Caddy's internal CA issues a cert.
+https://192.168.2.93 {
+    tls internal
 
     # ── VR World — served at /vr ──────────────────────────────────────────
     handle /vr* {
@@ -24,17 +50,7 @@
         reverse_proxy backend:8000
     }
 
-    # ── API — all /api/* routes go to FastAPI backend ─────────────────────
-    handle /api/* {
-        reverse_proxy backend:8000 {
-            header_up X-Real-IP {remote_host}
-            header_up X-Forwarded-For {remote_host}
-        }
-    }
-
-    # ── SSE events stream (mind → VR) — keep connection alive ────────────
-    # Handles both /events/stream (from VR via same-origin) and
-    # /api/events/stream (legacy / direct API access)
+    # ── SSE events stream — keep alive, flush immediately (no buffering) ──
     handle /events/stream* {
         reverse_proxy backend:8000 {
             flush_interval -1
@@ -45,6 +61,14 @@
         reverse_proxy backend:8000 {
             flush_interval -1
             header_up Connection "keep-alive"
+        }
+    }
+
+    # ── API — all /api/* routes go to FastAPI backend ─────────────────────
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
         }
     }
 

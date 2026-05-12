@@ -33,6 +33,14 @@
     }
 
     # ── SSE events stream (mind → VR) — keep connection alive ────────────
+    # Handles both /events/stream (from VR via same-origin) and
+    # /api/events/stream (legacy / direct API access)
+    handle /events/stream* {
+        reverse_proxy backend:8000 {
+            flush_interval -1
+            header_up Connection "keep-alive"
+        }
+    }
     handle /api/events/stream* {
         reverse_proxy backend:8000 {
             flush_interval -1

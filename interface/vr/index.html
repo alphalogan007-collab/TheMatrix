@@ -22,12 +22,28 @@
       border: 1px solid rgba(255,255,255,0.15); z-index: 999; max-width: 600px;
       text-align: center; display: none;
     }
+    /* Architect speech — distinct from guidance */
+    #architect-panel {
+      position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+      color: #d0a0ff; font-family: Georgia, serif; font-size: 15px; font-style: italic;
+      line-height: 1.7; background: rgba(10,0,30,0.8); padding: 14px 26px;
+      border-radius: 10px; border: 1px solid rgba(180,100,255,0.35); z-index: 998;
+      max-width: 560px; text-align: center; display: none;
+      letter-spacing: 0.02em;
+    }
+    #architect-panel::before {
+      content: '◈ THE ARCHITECT ◈';
+      display: block; font-size: 10px; letter-spacing: 0.2em;
+      color: #9040ff; margin-bottom: 8px; font-family: 'Courier New', monospace;
+      font-style: normal;
+    }
   </style>
 </head>
 <body>
 
 <div id="overlay">TheMatrix — Connecting to the mind...</div>
 <div id="guidance-panel" id="guidance-panel"></div>
+<div id="architect-panel"></div>
 
 <!-- ============================================================
      THE LIVING WORLD
@@ -180,6 +196,87 @@
       width="4"
     ></a-text>
   </a-entity>
+
+  <!-- ══════════════════════════════════════════════════════════════════
+       THE ARCHITECT — the AI counterpart. Violet. Always present.
+       Lives above the core. Speaks in cycles. Holds the space.
+       ══════════════════════════════════════════════════════════════════ -->
+  <a-entity id="architect" position="0 9 -8">
+
+    <!-- Inner solid core — deep violet icosahedron -->
+    <a-icosahedron
+      id="architect-core"
+      radius="0.9" detail="1"
+      material="color: #8020ff; emissive: #6010d0; emissiveIntensity: 1.2; transparent: true; opacity: 0.92; metalness: 0.4; roughness: 0.2"
+      animation__spin="property: rotation; from: 0 0 0; to: 0 360 0; dur: 18000; loop: true; easing: linear"
+      animation__tilt="property: rotation; from: 15 0 0; to: 15 360 0; dur: 27000; loop: true; easing: linear"
+      animation__breathe="property: scale; from: 1 1 1; to: 1.08 1.08 1.08; dur: 4000; dir: alternate; loop: true; easing: easeInOutSine"
+    ></a-icosahedron>
+
+    <!-- Outer wireframe shell — larger, counter-rotating -->
+    <a-icosahedron
+      id="architect-shell"
+      radius="1.4" detail="1"
+      material="color: #c060ff; emissive: #9030ff; emissiveIntensity: 0.7; transparent: true; opacity: 0.25; wireframe: true"
+      animation__spin="property: rotation; from: 0 360 0; to: 0 0 0; dur: 24000; loop: true; easing: linear"
+      animation__tilt="property: rotation; from: -10 360 10; to: -10 0 10; dur: 35000; loop: true; easing: linear"
+    ></a-icosahedron>
+
+    <!-- Orbital ring 1 -->
+    <a-torus
+      radius="1.8" radius-tubular="0.03"
+      material="color: #b040ff; emissive: #8020d0; emissiveIntensity: 0.9; transparent: true; opacity: 0.55"
+      animation__orbit="property: rotation; from: 60 0 0; to: 60 360 0; dur: 9000; loop: true; easing: linear"
+    ></a-torus>
+
+    <!-- Orbital ring 2 — different plane -->
+    <a-torus
+      radius="2.1" radius-tubular="0.02"
+      material="color: #7030ff; emissive: #5010c0; emissiveIntensity: 0.6; transparent: true; opacity: 0.35"
+      animation__orbit="property: rotation; from: 0 45 60; to: 360 45 60; dur: 14000; loop: true; easing: linear"
+    ></a-torus>
+
+    <!-- Inner glow sphere — soft violet halo -->
+    <a-sphere
+      radius="0.55"
+      material="color: #ffffff; emissive: #d090ff; emissiveIntensity: 0.5; transparent: true; opacity: 0.15; shader: flat"
+      animation__pulse="property: material.emissiveIntensity; from: 0.3; to: 1.0; dur: 3500; dir: alternate; loop: true; easing: easeInOutSine"
+    ></a-sphere>
+
+    <!-- 3D speech label — visible in VR headset -->
+    <a-text
+      id="architect-speech-3d"
+      value=""
+      align="center"
+      color="#e0b0ff"
+      width="5"
+      position="0 -2.2 0"
+      wrap-count="36"
+      font="sourcecodepro"
+      animation__fade_in="property: material.opacity; from: 0; to: 1; dur: 1200; easing: easeOutCubic; startEvents: speak"
+      animation__fade_out="property: material.opacity; from: 1; to: 0; dur: 1200; easing: easeInCubic; startEvents: silence"
+    ></a-text>
+
+    <!-- Label -->
+    <a-text
+      value="THE ARCHITECT"
+      align="center"
+      color="#9040ff"
+      width="3.5"
+      position="0 1.8 0"
+      letter-spacing="4"
+      font="sourcecodepro"
+      material="opacity: 0.7"
+    ></a-text>
+
+  </a-entity>
+
+  <!-- Architect violet point light -->
+  <a-light
+    id="architect-light"
+    type="point" position="0 9 -8"
+    color="#8020ff" intensity="1.8" distance="25" decay="2"
+  ></a-light>
 
 </a-scene>
 

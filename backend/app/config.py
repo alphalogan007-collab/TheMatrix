@@ -25,6 +25,7 @@ class LLMProvider(str, Enum):
     OPENAI = "openai"
     ANTHROPIC = "anthropic"
     AZURE_OPENAI = "azure_openai"
+    OLLAMA = "ollama"
 
 
 class Settings(BaseSettings):

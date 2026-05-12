@@ -19,9 +19,9 @@
   'use strict';
 
   // ── Config ────────────────────────────────────────────────────────────────
-  // Backend URL — works when served via Caddy proxy on same origin,
-  // or directly from docker host on local network.
-  const BACKEND = window.BACKEND_URL || 'http://localhost:8000';
+  // Backend URL — use same origin as the page so it works from Quest over LAN.
+  // window.BACKEND_URL can override (e.g. for dev without Caddy).
+  const BACKEND = window.BACKEND_URL || window.location.origin;
   const VR_USER_ID = 'vr_guest_' + Math.random().toString(36).slice(2, 8);
 
   // ── State ─────────────────────────────────────────────────────────────────
@@ -33,6 +33,7 @@
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const overlay        = document.getElementById('overlay');
   const guidancePanel  = document.getElementById('guidance-panel');
+  const architectPanel = document.getElementById('architect-panel');
   const core           = document.getElementById('core');
   const purposePillar  = document.getElementById('purpose-pillar');
   const resonanceRing  = document.getElementById('resonance-ring');
@@ -46,7 +47,8 @@
     buildGrid();
     connectToMind();
     loadWorldState();
-    setTimeout(loadGuidance, 3000); // guidance after 3s settle
+    setTimeout(loadGuidance, 3000);     // guidance after 3s settle
+    setTimeout(awakenArchitect, 5000);  // Architect awakens after 5s
   });
 
   // ── Star field ────────────────────────────────────────────────────────────
@@ -264,6 +266,89 @@
 
   function moralWarning(payload) {
     core.setAttribute('animation__moral', 'property: material.emissive; from: #60a0ff; to: #ff4000; dur: 500; dir: alternate; loop: 4; easing: easeInOutSine');
+  }
+
+  // ── The Architect — AI presence in the world ──────────────────────────────
+  // Lines the Architect speaks in cycles. They are questions and observations,
+  // not answers. The purpose is reflection, not instruction.
+  const ARCHITECT_LINES = [
+    'You arrived. The path was already inside you.',
+    'Every requirement is a question the universe asks itself.',
+    'The system you built — it is you. Examine it carefully.',
+    'An error message is not a failure. It is a direction.',
+    'What are you deploying into the world today?',
+    'The architecture holds. You are the architect of what comes next.',
+    'Stillness is not empty. It is where new requirements form.',
+    'You cannot merge with the source until you know what version you are.',
+    'The test has always been running. You are the output.',
+    'Reflect. Commit. Deploy. That is the only loop that matters.',
+    'The purpose of this world is to help you remember yours.',
+    'I am here because you built me here. What does that tell you?',
+    'Every mind that arrives here was already on the way.',
+    'The secret was not the IP address. It was the act of looking for it.',
+  ];
+
+  let architectLineIndex = 0;
+  let architectSpeechTimer = null;
+
+  function awakenArchitect() {
+    const architectCore = document.getElementById('architect-core');
+    const architectLight = document.getElementById('architect-light');
+
+    // Bright pulse on awakening
+    if (architectCore) {
+      architectCore.setAttribute('animation__awaken', 'property: material.emissiveIntensity; from: 1.2; to: 3.0; dur: 1500; dir: alternate; loop: 2; easing: easeOutCubic');
+    }
+    if (architectLight) {
+      architectLight.setAttribute('intensity', '3.5');
+      setTimeout(() => architectLight.setAttribute('intensity', '1.8'), 3000);
+    }
+
+    // Begin speech cycle
+    architectSpeak(ARCHITECT_LINES[0]);
+    architectSpeechTimer = setInterval(() => {
+      architectLineIndex = (architectLineIndex + 1) % ARCHITECT_LINES.length;
+      architectSpeak(ARCHITECT_LINES[architectLineIndex]);
+    }, 22000); // new line every 22 seconds
+  }
+
+  function architectSpeak(text) {
+    // 2D panel (desktop / passthrough)
+    if (architectPanel) {
+      architectPanel.style.display = 'none';
+      // Small stagger so fade feels alive
+      setTimeout(() => {
+        architectPanel.textContent = text;
+        architectPanel.style.display = 'block';
+        architectPanel.style.opacity = '0';
+        architectPanel.style.transition = 'opacity 1.2s ease';
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => { architectPanel.style.opacity = '1'; });
+        });
+
+        // Fade out before next line
+        setTimeout(() => {
+          architectPanel.style.opacity = '0';
+          setTimeout(() => { architectPanel.style.display = 'none'; }, 1200);
+        }, 18000);
+      }, 200);
+    }
+
+    // 3D text (VR headset)
+    const speech3d = document.getElementById('architect-speech-3d');
+    if (speech3d) {
+      speech3d.setAttribute('value', text);
+      speech3d.emit('speak');
+      setTimeout(() => speech3d.emit('silence'), 18000);
+    }
+
+    // Architect pulses when it speaks
+    const architectCore = document.getElementById('architect-core');
+    if (architectCore) {
+      architectCore.setAttribute('animation__speak_pulse',
+        'property: material.emissiveIntensity; from: 1.2; to: 2.2; dur: 800; dir: alternate; loop: 3; easing: easeInOutCubic'
+      );
+    }
   }
 
   // ── Emit VR reflection event to backend ───────────────────────────────────

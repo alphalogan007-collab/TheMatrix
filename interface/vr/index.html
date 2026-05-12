@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TheMatrix — The Living World</title>
+  <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/aframe-particle-system-component@1.1.5/dist/aframe-particle-system-component.min.js"></script>
+  <style>
+    body { margin: 0; background: #000; overflow: hidden; }
+    #overlay {
+      position: fixed; top: 20px; left: 50%; transform: translateX(-50%);
+      color: #a0e8ff; font-family: 'Courier New', monospace; font-size: 14px;
+      background: rgba(0,0,0,0.6); padding: 8px 18px; border-radius: 20px;
+      border: 1px solid rgba(160,232,255,0.3); z-index: 999;
+      pointer-events: none;
+    }
+    #guidance-panel {
+      position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%);
+      color: #fff; font-family: Georgia, serif; font-size: 16px; line-height: 1.6;
+      background: rgba(0,0,0,0.75); padding: 16px 28px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.15); z-index: 999; max-width: 600px;
+      text-align: center; display: none;
+    }
+  </style>
+</head>
+<body>
+
+<div id="overlay">TheMatrix — Connecting to the mind...</div>
+<div id="guidance-panel" id="guidance-panel"></div>
+
+<!-- ============================================================
+     THE LIVING WORLD
+     Each entity maps to a Y-Theory mind event:
+       ENGINE_RESONATE       → harmonic pulse on the sun/core
+       ENGINE_EXTERNALIZE    → new mind node spawns
+       REFLECTION_COMPLETED  → guidance panel appears, world stills
+       PURPOSE_ACTIVATED     → central pillar lights up gold
+       ENGINE_COLLAPSE       → world dims, warning pulse
+     ============================================================ -->
+<a-scene
+  id="main-scene"
+  background="color: #000010"
+  fog="type: exponential; color: #000020; density: 0.015"
+  vr-mode-ui="enabled: true"
+  renderer="antialias: true; colorManagement: true; physicallyCorrectLights: true"
+>
+
+  <!-- Assets -->
+  <a-assets>
+    <a-mixin id="mind-node"
+      geometry="primitive: icosahedron; radius: 0.18; detail: 1"
+      material="color: #40e0ff; emissive: #40e0ff; emissiveIntensity: 0.6; transparent: true; opacity: 0.85; wireframe: false"
+      animation__pulse="property: material.emissiveIntensity; from: 0.3; to: 1.0; dur: 2000; dir: alternate; loop: true; easing: easeInOutSine"
+    ></a-mixin>
+  </a-assets>
+
+  <!-- ── GROUND ── -->
+  <a-plane
+    id="ground"
+    rotation="-90 0 0" width="200" height="200"
+    material="color: #050520; metalness: 0.8; roughness: 0.3"
+    shadow="receive: true"
+  ></a-plane>
+
+  <!-- ── GRID LINES (the matrix lattice) ── -->
+  <a-entity id="grid-container" position="0 0.01 0">
+    <!-- Generated programmatically by mind-bridge.js -->
+  </a-entity>
+
+  <!-- ── CENTRAL CORE / SUN (the origin) ── -->
+  <a-sphere
+    id="core"
+    position="0 3 -8"
+    radius="1.2"
+    material="color: #ffffff; emissive: #60a0ff; emissiveIntensity: 0.8; transparent: true; opacity: 0.95"
+    shadow="cast: true"
+    animation__breathe="property: scale; from: 1 1 1; to: 1.05 1.05 1.05; dur: 3000; dir: alternate; loop: true; easing: easeInOutSine"
+    animation__rotate="property: rotation; from: 0 0 0; to: 0 360 0; dur: 40000; loop: true; easing: linear"
+  ></a-sphere>
+
+  <!-- Core glow ring -->
+  <a-torus
+    id="core-ring"
+    position="0 3 -8" rotation="90 0 0"
+    radius="1.8" radius-tubular="0.04"
+    material="color: #40e0ff; emissive: #40e0ff; emissiveIntensity: 0.9; transparent: true; opacity: 0.6"
+    animation__rotate="property: rotation; from: 90 0 0; to: 90 360 0; dur: 12000; loop: true; easing: linear"
+  ></a-torus>
+
+  <!-- ── PURPOSE PILLAR (lights up gold on PURPOSE_ACTIVATED) ── -->
+  <a-cylinder
+    id="purpose-pillar"
+    position="0 0 -8" radius="0.08" height="6"
+    material="color: #304060; emissive: #304060; emissiveIntensity: 0.2; transparent: true; opacity: 0.7"
+  ></a-cylinder>
+
+  <!-- ── INITIAL MIND NODES (seed nodes already in the world) ── -->
+  <a-entity id="node-field" position="0 1.5 -6">
+    <a-icosahedron mixin="mind-node" position="-4 0 -3" scale="1 1 1"></a-icosahedron>
+    <a-icosahedron mixin="mind-node" position="4 0.5 -2" scale="0.85 0.85 0.85"></a-icosahedron>
+    <a-icosahedron mixin="mind-node" position="-2 1 2" scale="0.7 0.7 0.7"></a-icosahedron>
+    <a-icosahedron mixin="mind-node" position="2.5 -0.5 1" scale="0.6 0.6 0.6"></a-icosahedron>
+    <a-icosahedron mixin="mind-node" position="0 2 -5" scale="1.1 1.1 1.1"></a-icosahedron>
+  </a-entity>
+
+  <!-- New nodes spawned by ENGINE_EXTERNALIZE are appended here -->
+  <a-entity id="new-mind-nodes"></a-entity>
+
+  <!-- ── AMBIENT PARTICLES (living universe) ── -->
+  <a-entity
+    particle-system="preset: snow; particleCount: 200; color: #40e0ff,#ffffff; size: 0.04; velocityValue: 0 -0.05 0; maxAge: 12; blending: additive"
+    position="0 8 -8"
+  ></a-entity>
+
+  <!-- ── DISTANT STAR DOME ── -->
+  <a-sphere
+    radius="90" material="color: #000018; side: back; shader: flat"
+    position="0 0 0"
+  ></a-sphere>
+  <a-entity id="stars" position="0 0 0">
+    <!-- Populated by mind-bridge.js on load -->
+  </a-entity>
+
+  <!-- ── RESONANCE WAVE RING (pulses on ENGINE_RESONATE) ── -->
+  <a-torus
+    id="resonance-ring"
+    position="0 0.1 -8" rotation="90 0 0"
+    radius="0.1" radius-tubular="0.03"
+    material="color: #40e0ff; emissive: #40e0ff; emissiveIntensity: 1; transparent: true; opacity: 0"
+    visible="true"
+  ></a-torus>
+
+  <!-- ── LIGHTS ── -->
+  <a-light type="ambient" color="#0a0a1a" intensity="1.2"></a-light>
+  <a-light type="point" position="0 4 -8" color="#60a0ff" intensity="2.5" distance="30" decay="2" castShadow="true"></a-light>
+  <a-light type="point" position="-8 2 -4" color="#400080" intensity="1" distance="20" decay="2"></a-light>
+  <a-light type="point" position="8 2 -4" color="#004080" intensity="1" distance="20" decay="2"></a-light>
+
+  <!-- ── CAMERA + CONTROLS ── -->
+  <a-entity id="rig" position="0 1.6 4">
+    <a-camera
+      id="camera"
+      look-controls="pointerLockEnabled: false"
+      wasd-controls="acceleration: 20"
+    >
+      <!-- Cursor for desktop interaction -->
+      <a-cursor
+        color="#40e0ff"
+        fuse="false"
+        material="color: #40e0ff; shader: flat"
+        geometry="primitive: ring; radiusInner: 0.012; radiusOuter: 0.02"
+      ></a-cursor>
+    </a-camera>
+  </a-entity>
+
+  <!-- ── REFLECTION PORTAL (activates on REFLECTION_COMPLETED) ── -->
+  <a-ring
+    id="reflection-portal"
+    position="0 1.8 -12"
+    radius-inner="1.2" radius-outer="1.5"
+    rotation="0 0 0"
+    material="color: #ffffff; emissive: #ffffff; emissiveIntensity: 0.1; transparent: true; opacity: 0.15; side: double"
+  ></a-ring>
+
+  <!-- ── ENTER VR BUTTON (visible on desktop, hidden in headset) ── -->
+  <a-entity
+    id="enter-vr-prompt"
+    position="0 1.5 -3"
+    visible="true"
+  >
+    <a-plane
+      width="2.2" height="0.5"
+      material="color: #0a0a30; transparent: true; opacity: 0.8"
+    ></a-plane>
+    <a-text
+      value="[ ENTER THE MATRIX ]"
+      align="center" color="#40e0ff"
+      position="0 0 0.01"
+      width="4"
+    ></a-text>
+  </a-entity>
+
+</a-scene>
+
+<script src="mind-bridge.js"></script>
+</body>
+</html>

@@ -3,6 +3,10 @@
 Every time the Y-Theory engine finds a new connection between minds/layers,
 it emits an event here. Frontend subscribes and draws the graph in real-time.
 
+Also provides:
+  GET  /api/events/stream?user_id=...  — per-user SSE for VR world
+  POST /api/events                     — receive VR events (VR_REFLECTION etc.)
+
 Event shape:
   {
     "type": "PATTERN_LINK",
@@ -18,13 +22,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from datetime import datetime, timezone
-from typing import AsyncGenerator
+from typing import Any, AsyncGenerator, Dict, Optional
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Query
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
-from app.core.y_event_bus import get_event_bus, YEventType
+from app.core.y_event_bus import YEventType, YEvent, get_event_bus
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -84,3 +92,133 @@ async def stream_events():
             "X-Accel-Buffering": "no",
         },
     )
+
+
+# ---------------------------------------------------------------------------
+# VR World — per-user SSE stream
+# The VR world connects here to receive mind events in real time.
+# GET /api/events/stream?user_id=vr_guest_abc123
+# ---------------------------------------------------------------------------
+
+async def _vr_stream(user_id: str) -> AsyncGenerator[str, None]:
+    """Forward convergence events to a specific VR user via SSE."""
+    bus = get_event_bus()
+
+    # Also subscribe to key engine events and fan them into the VR user's queue
+    vr_queue: asyncio.Queue = asyncio.Queue(maxsize=100)
+
+    VR_WATCH = [
+        YEventType.ENGINE_RESONATE,
+        YEventType.ENGINE_EXTERNALIZE,
+        YEventType.ENGINE_COLLAPSE,
+        YEventType.ENGINE_BRANCH,
+        YEventType.ENGINE_MERGE,
+        YEventType.REFLECTION_COMPLETED,
+        YEventType.PURPOSE_ACTIVATED,
+        YEventType.MORAL_RISK_DETECTED,
+        YEventType.VR_REFLECTION,
+        YEventType.VR_MIND_ENTER,
+        YEventType.VR_MIND_EXIT,
+    ]
+
+    sub_id = f"vr_{user_id}"
+
+    async def vr_handler(event: YEvent) -> None:
+        try:
+            vr_queue.put_nowait({
+                "event_type": event.event_type.value,
+                "source_service": event.source_service,
+                "payload": event.payload,
+                "timestamp": event.timestamp.isoformat(),
+            })
+        except asyncio.QueueFull:
+            pass
+
+    for et in VR_WATCH:
+        bus.subscribe(et, vr_handler, subscriber_id=sub_id)
+
+    # Announce entry
+    await bus.publish(YEvent(
+        event_type=YEventType.VR_MIND_ENTER,
+        source_service="vr_world",
+        payload={"user_id": user_id}
+    ))
+
+    try:
+        # Initial hello
+        yield f"data: {json.dumps({'event_type': 'CONNECTED', 'payload': {'user_id': user_id}})}\n\n"
+        while True:
+            try:
+                event_data = await asyncio.wait_for(vr_queue.get(), timeout=20.0)
+                yield f"data: {json.dumps(event_data)}\n\n"
+            except asyncio.TimeoutError:
+                yield "data: {\"event_type\":\"heartbeat\"}\n\n"
+    finally:
+        for et in VR_WATCH:
+            bus.unsubscribe(et, sub_id)
+        # Announce exit (fire-and-forget — loop may be closed)
+        try:
+            await bus.publish(YEvent(
+                event_type=YEventType.VR_MIND_EXIT,
+                source_service="vr_world",
+                payload={"user_id": user_id}
+            ))
+        except Exception:
+            pass
+
+
+@router.get("/events/stream")
+async def vr_event_stream(user_id: str = Query(default="vr_guest")):
+    """Per-user SSE stream for the VR world.
+    The Meta Quest browser subscribes here to receive live mind events.
+    """
+    return StreamingResponse(
+        _vr_stream(user_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Access-Control-Allow-Origin": "*",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# VR World — receive events FROM the VR world
+# POST /api/events  { event_type, source_service, payload }
+# ---------------------------------------------------------------------------
+
+class VREventIn(BaseModel):
+    event_type: str
+    source_service: str = "vr_world"
+    payload: Dict[str, Any] = {}
+
+
+@router.post("/events")
+async def receive_vr_event(body: VREventIn):
+    """Receive an event emitted by the VR world (e.g. VR_REFLECTION).
+    Publishes it onto the y_event_bus so the mind engine can react.
+    """
+    bus = get_event_bus()
+
+    # Map string event type to enum — accept only known VR types for security
+    VR_ALLOWED = {
+        "VR_REFLECTION": YEventType.VR_REFLECTION,
+        "VR_MIND_ENTER": YEventType.VR_MIND_ENTER,
+        "VR_MIND_EXIT":  YEventType.VR_MIND_EXIT,
+    }
+
+    et = VR_ALLOWED.get(body.event_type)
+    if not et:
+        logger.warning("routes_events: unknown VR event type rejected: %s", body.event_type)
+        return {"status": "ignored", "reason": "unknown event type"}
+
+    event = YEvent(
+        event_type=et,
+        source_service=body.source_service,
+        payload=body.payload,
+    )
+    await bus.publish(event)
+    logger.info("routes_events: VR event received and published: %s from %s", et.value, body.source_service)
+    return {"status": "accepted", "event_id": event.event_id}
+

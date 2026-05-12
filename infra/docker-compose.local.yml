@@ -1,0 +1,179 @@
+# ==============================================================================
+# docker-compose.local.yml — TheMatrix local development stack
+# Stripped-down single-machine version for new PC + Meta Quest VR development.
+# Excludes cloud-only services. Includes Ollama (local LLM, no API key needed).
+#
+# Usage:
+#   cd infra
+#   docker compose -f docker-compose.local.yml up -d
+#   docker compose -f docker-compose.local.yml logs -f backend
+# ==============================================================================
+
+services:
+
+  # ----------------------------------------------------------------------------
+  # PostgreSQL with pgvector
+  # ----------------------------------------------------------------------------
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: matrix_db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: TheMatrix
+      POSTGRES_USER: TheMatrix_user
+      POSTGRES_PASSWORD: localdev_pg_pass_123
+    ports:
+      - "5432:5432"
+    volumes:
+      - matrix_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U TheMatrix_user -d TheMatrix"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Redis — event bus backbone, rate limiting, session
+  # ----------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: matrix_redis
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning --requirepass localdev_redis_pass_123
+    ports:
+      - "6379:6379"
+    volumes:
+      - matrix_redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "localdev_redis_pass_123", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  # ----------------------------------------------------------------------------
+  # Ollama — local LLM brain. No API key. No external calls. We own it.
+  # ----------------------------------------------------------------------------
+  ollama:
+    image: ollama/ollama:latest
+    container_name: matrix_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - matrix_ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # ----------------------------------------------------------------------------
+  # MindAI Backend — the mind API
+  # ----------------------------------------------------------------------------
+  backend:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: matrix_backend
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://:localdev_redis_pass_123@redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://TheMatrix_user:localdev_pg_pass_123@db:5432/TheMatrix
+      MIND_ROLE: source
+      MIND_ID: source_local
+      MASTER_URL: http://localhost:8000
+      OLLAMA_BASE_URL: http://ollama:11434
+      # Y-Theory seed files — map your local training folder
+      SEED_FILES_PATHS: /seed/y-theory:/seed/corpus
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app
+      - ./data/uploads:/app/data/uploads
+      # Y-Theory core PDFs — already on your desktop
+      - C:\Users\bubus\Desktop\training\Seed\Y-THOERY:/seed/y-theory:ro
+      # Broader seed corpus
+      - C:\Users\bubus\Desktop\training\Seed:/seed/corpus:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --timeout-graceful-shutdown 3
+
+  # ----------------------------------------------------------------------------
+  # Celery Worker — background tasks (learning, mind pulse)
+  # ----------------------------------------------------------------------------
+  worker:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: matrix_worker
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      POSTGRES_HOST: db
+      REDIS_URL: redis://:localdev_redis_pass_123@redis:6379/0
+      DATABASE_URL: postgresql+asyncpg://TheMatrix_user:localdev_pg_pass_123@db:5432/TheMatrix
+      OLLAMA_BASE_URL: http://ollama:11434
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ../backend:/app
+    command: celery -A app.worker worker --loglevel=info --queues=default,blueprint,ingestion
+
+  # ----------------------------------------------------------------------------
+  # VR World — Meta Quest WebXR interface
+  # A-Frame world served over HTTP (Meta Quest Browser supports WebXR on LAN)
+  # ----------------------------------------------------------------------------
+  vr:
+    build:
+      context: ../interface/vr
+      dockerfile: Dockerfile
+    container_name: matrix_vr
+    restart: unless-stopped
+    ports:
+      - "8090:80"
+    environment:
+      - BACKEND_URL=http://localhost:8000
+
+  # ----------------------------------------------------------------------------
+  # Reverse proxy — routes /vr to VR world, everything else to backend
+  # Uses plain HTTP for local LAN (Meta Quest Browser accepts HTTP on local net)
+  # ----------------------------------------------------------------------------
+  caddy:
+    image: caddy:2-alpine
+    container_name: matrix_caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.local:/etc/caddy/Caddyfile
+      - matrix_caddy_data:/data
+      - matrix_caddy_config:/config
+    depends_on:
+      - backend
+      - vr
+
+volumes:
+  matrix_pgdata:
+  matrix_redisdata:
+  matrix_ollama_models:
+  matrix_caddy_data:
+  matrix_caddy_config:

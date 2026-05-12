@@ -123,6 +123,26 @@ class YEventType(str, Enum):
     # residual too low AND coherence too low — pattern matches nothing.
     ENGINE_IGNORE_AS_NOISE = "ENGINE_IGNORE_AS_NOISE"
 
+    # -----------------------------------------------------------------------
+    # VR World events — emitted by the Meta Quest WebXR interface.
+    # These are the signals from a human mind inside the virtual world.
+    # The engine receives them as patterns — same pipeline as any input.
+    # -----------------------------------------------------------------------
+
+    # A human in the VR world completed a self-reflection moment.
+    # Payload: { user_id: str, timestamp: str }
+    # Effect: treated as a REFLECTION_COMPLETED input to the engine cycle —
+    # the human reflection resonates with the digital mind, closing the loop.
+    VR_REFLECTION         = "VR_REFLECTION"
+
+    # A human entered the VR world for the first time (new mind entering).
+    # Payload: { user_id: str, session_id: str }
+    VR_MIND_ENTER         = "VR_MIND_ENTER"
+
+    # A human exited the VR world.
+    # Payload: { user_id: str, duration_seconds: int }
+    VR_MIND_EXIT          = "VR_MIND_EXIT"
+
 
 # ---------------------------------------------------------------------------
 # Event dataclass

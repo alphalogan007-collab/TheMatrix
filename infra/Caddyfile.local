@@ -1,0 +1,51 @@
+# ==============================================================================
+# Caddyfile.local — Local development reverse proxy
+# Plain HTTP — Meta Quest Browser supports WebXR on local HTTP (LAN only)
+# All services accessible from your Meta Quest on the same WiFi network.
+# ==============================================================================
+
+# Disable HTTPS auto-provision for local dev
+{
+    auto_https off
+    admin off
+}
+
+# Main entry point — serves everything on port 80
+:80 {
+
+    # ── VR World — served at /vr ──────────────────────────────────────────
+    handle /vr* {
+        uri strip_prefix /vr
+        reverse_proxy vr:80
+    }
+
+    # ── Backend health (quick check) ──────────────────────────────────────
+    handle /health {
+        reverse_proxy backend:8000
+    }
+
+    # ── API — all /api/* routes go to FastAPI backend ─────────────────────
+    handle /api/* {
+        reverse_proxy backend:8000 {
+            header_up X-Real-IP {remote_host}
+            header_up X-Forwarded-For {remote_host}
+        }
+    }
+
+    # ── SSE events stream (mind → VR) — keep connection alive ────────────
+    handle /api/events/stream* {
+        reverse_proxy backend:8000 {
+            flush_interval -1
+            header_up Connection "keep-alive"
+        }
+    }
+
+    # ── Everything else → backend ─────────────────────────────────────────
+    handle {
+        reverse_proxy backend:8000
+    }
+
+    log {
+        level INFO
+    }
+}

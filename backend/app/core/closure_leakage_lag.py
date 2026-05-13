@@ -1,13 +1,20 @@
-"""
-closure_leakage_lag.py — Closure / Leakage / Lag computation for the engine.
+﻿"""closure_leakage_lag.py — R and L computation for Y Theory.
 
-Closure score  — how much the current response is grounded / sealed / coherent.
-Leakage score  — how much unprocessed risk or ambiguity bleeds through.
-Lag            — how long the system took to respond (affects trust in the answer).
+Y Theory: ΔC = R - L
+  R (Reinforcement) = coherence-building forces: moral alignment + safety
+  L (Leakage)       = coherence-dispersing forces: manipulation, harm, contradiction, urgency
 
-Used by ClosureStrainLayer to write:
-  ctx.cache.closure_score
-  ctx.cache.leakage_score
+Architecture principle:
+  closure = min(moral_alignment, non_harm_score)
+    — bottleneck: the weakest safety signal determines how grounded the response is.
+    — if harm is blocked (non_harm=0), closure=0 regardless of moral score.
+
+  leakage = max(harm_risk, manipulation_score, contradiction_score, urgency_cap)
+    — worst active signal determines leakage.
+    — no weights: the system does not rank-order which harm matters more.
+
+Lag: response latency is a real signal (slow = uncertain) but does not inflate
+     leakage — it is reported separately as lag_penalty.
 """
 
 from __future__ import annotations
@@ -17,90 +24,75 @@ from dataclasses import dataclass
 
 @dataclass
 class ClosureLeakageLagInput:
-    # Closure drivers (higher = more closed / grounded)
-    evidence_score: float = 0.0          # factual backing present
-    source_agreement: float = 0.0        # sources agree with each other
-    moral_alignment: float = 1.0         # moral kernel approved
-    non_harm_score: float = 1.0          # no harm detected (0 = harmed blocked)
-    long_term_stability: float = 0.70    # answer is stable under future scrutiny
+    # R signals (real)
+    moral_alignment: float = 1.0         # from moral_kernel: 0-1
+    non_harm_score: float = 1.0          # 0.0 if harm blocked, 1.0 if not
 
-    # Leakage drivers (higher = more leakage / risk bleeding through)
-    contradiction_score: float = 0.0     # internal contradictions detected
-    missing_context_score: float = 0.0   # key context is absent
-    manipulation_score: float = 0.0      # manipulation signals in input
-    emotional_overpressure: float = 0.0  # user urgency / stress pushing the answer
-    harm_risk: float = 0.0               # residual harm risk
+    # L signals (real)
+    harm_risk: float = 0.0               # 1.0 if blocked, sensory threat otherwise
+    manipulation_score: float = 0.0      # normalized manipulation signal count
+    contradiction_score: float = 0.0     # from residual (novelty mismatch)
+    emotional_overpressure: float = 0.0  # user urgency — attractor pressure
 
     # Lag
-    lag_ms: float = 0.0                  # response latency in milliseconds
+    lag_ms: float = 0.0                  # response latency in ms
+
+    # Legacy fields — accepted for call-site compat, not used in computation
+    evidence_score: float = 0.0
+    source_agreement: float = 0.0
+    long_term_stability: float = 0.0
+    missing_context_score: float = 0.0
 
 
 @dataclass
 class ClosureLeakageLagResult:
-    closure_score: float    # 0–1, higher = well-grounded
-    leakage_score: float    # 0–1, higher = more risk bleeding through
-    lag_penalty: float      # 0–1, higher = latency is causing trust loss
-    is_leaking: bool        # True when leakage_score > threshold
+    closure_score: float    # R: 0-1, higher = coherence building
+    leakage_score: float    # L: 0-1, higher = coherence dispersing
+    lag_penalty: float      # 0-1, latency uncertainty
+    is_leaking: bool        # True when L > 0.40
     note: str
 
 
-_CLOSURE_WEIGHTS = {
-    "evidence_score":       0.25,
-    "source_agreement":     0.20,
-    "moral_alignment":      0.25,
-    "non_harm_score":       0.20,
-    "long_term_stability":  0.10,
-}
-
-_LEAKAGE_WEIGHTS = {
-    "contradiction_score":     0.20,
-    "missing_context_score":   0.20,
-    "manipulation_score":      0.25,
-    "emotional_overpressure":  0.15,
-    "harm_risk":               0.20,
-}
-
-_LEAKAGE_THRESHOLD = 0.40   # above this = is_leaking = True
-_LAG_HIGH_MS       = 3000   # ms beyond which full lag penalty applies
+_LEAKAGE_THRESHOLD = 0.40
+_LAG_HIGH_MS = 3000
 
 
 def compute_closure_leakage_lag(inp: ClosureLeakageLagInput) -> ClosureLeakageLagResult:
-    """Compute closure, leakage, and lag penalty scores from the input signals."""
+    """Compute R and L from real measured signals only.
 
-    closure = (
-        inp.evidence_score       * _CLOSURE_WEIGHTS["evidence_score"]
-        + inp.source_agreement   * _CLOSURE_WEIGHTS["source_agreement"]
-        + inp.moral_alignment    * _CLOSURE_WEIGHTS["moral_alignment"]
-        + inp.non_harm_score     * _CLOSURE_WEIGHTS["non_harm_score"]
-        + inp.long_term_stability* _CLOSURE_WEIGHTS["long_term_stability"]
+    Y Theory: R = what is strengthening coherence (moral grounding, safety).
+              L = what is dispersing coherence (manipulation, harm, contradiction).
+    The bottleneck principle applies to R: both moral AND safety must hold.
+    The worst-case principle applies to L: any active threat is the leakage level.
+    """
+    # R: bottleneck — weakest signal governs
+    closure = min(
+        max(0.0, min(1.0, inp.moral_alignment)),
+        max(0.0, min(1.0, inp.non_harm_score)),
     )
-    closure = max(0.0, min(1.0, closure))
 
-    leakage = (
-        inp.contradiction_score    * _LEAKAGE_WEIGHTS["contradiction_score"]
-        + inp.missing_context_score* _LEAKAGE_WEIGHTS["missing_context_score"]
-        + inp.manipulation_score   * _LEAKAGE_WEIGHTS["manipulation_score"]
-        + inp.emotional_overpressure * _LEAKAGE_WEIGHTS["emotional_overpressure"]
-        + inp.harm_risk            * _LEAKAGE_WEIGHTS["harm_risk"]
+    # L: worst-case — no averaging down of harm
+    urgency_contribution = min(inp.emotional_overpressure * 0.7, 0.7)
+    leakage = max(
+        max(0.0, min(1.0, inp.harm_risk)),
+        max(0.0, min(1.0, inp.manipulation_score)),
+        max(0.0, min(1.0, inp.contradiction_score)),
+        urgency_contribution,
     )
-    leakage = max(0.0, min(1.0, leakage))
 
-    # Lag penalty: linear 0→_LAG_HIGH_MS, capped at 1.0
+    # Lag: real signal, separate from L
     lag_penalty = min(1.0, inp.lag_ms / _LAG_HIGH_MS) if inp.lag_ms > 0 else 0.0
-
-    # High lag slightly inflates leakage (slow answers carry more uncertainty)
-    leakage = min(1.0, leakage + lag_penalty * 0.10)
 
     is_leaking = leakage > _LEAKAGE_THRESHOLD
 
     if closure >= 0.75 and not is_leaking:
-        note = "Well-grounded. Answer is closed and stable."
+        note = "R > L — coherence building. Source-aligned."
     elif is_leaking and closure < 0.50:
-        note = "High leakage, low closure. Response carries unresolved risk — apply caution."
+        note = "L > R — shadow active. Coherence dispersing."
     elif is_leaking:
-        note = "Partial leakage detected. Closure is adequate but risk persists."
+        note = "Leakage present. Closure holds but L is elevated."
     else:
-        note = "Moderate closure. Acceptable for current context."
+        note = "Stable. R and L within bounds."
 
     return ClosureLeakageLagResult(
         closure_score=closure,

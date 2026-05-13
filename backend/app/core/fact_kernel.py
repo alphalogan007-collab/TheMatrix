@@ -1,23 +1,32 @@
-"""Fact Kernel — lightweight factual grounding check.
+﻿"""fact_kernel.py — Linguistic pattern detection for user input.
 
-Assesses whether the user's stated premise appears factually grounded,
-detects internally contradictory claims, and flags epistemic issues that
-may distort identity advice.
+Y Theory: the mind cannot evaluate whether a user's claim is factually true.
+It has no external fact database and no ground truth.
+
+What the mind CAN detect from text structure:
+  - Absolute language (always, never, everyone, impossible) — collapses the
+    probability space, signals over-certainty.
+  - Internal contradictions — the claim contains opposing poles simultaneously,
+    which is a structural leakage signal (the statement cannot hold coherently).
+
+These are real pattern-level detections, not truth judgments.
+The factual grounding scores (0.30, 0.65, 0.85) and confidence numbers that
+previously lived here were invented — they implied the system knew something
+about the claim's truth value. It does not.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 
 class FactVerdict(str, Enum):
-    GROUNDED = "GROUNDED"
-    UNCERTAIN = "UNCERTAIN"
-    INTERNALLY_CONTRADICTORY = "INTERNALLY_CONTRADICTORY"
-    ABSOLUTE_CLAIM = "ABSOLUTE_CLAIM"
-    UNFALSIFIABLE = "UNFALSIFIABLE"
+    GROUNDED = "GROUNDED"                          # no flags detected
+    UNCERTAIN = "UNCERTAIN"                        # absolute terms present
+    INTERNALLY_CONTRADICTORY = "INTERNALLY_CONTRADICTORY"  # opposing poles
+    ABSOLUTE_CLAIM = "ABSOLUTE_CLAIM"              # 3+ absolute terms
 
 
 _ABSOLUTE_PATTERNS: list[re.Pattern[str]] = [
@@ -47,12 +56,16 @@ class FactKernelResult:
     verdict: FactVerdict
     absolute_claim_count: int
     contradiction_signals: list[str]
-    confidence: float          # 0.0 – 1.0 (confidence in the verdict)
-    factual_grounding_score: float  # 0.0 – 1.0
 
 
 def run_fact_kernel(text: str) -> FactKernelResult:
-    """Assess the factual grounding of a user-supplied text fragment."""
+    """Detect absolute-language patterns and internal contradictions.
+
+    No grounding scores. No confidence numbers. Only what the text structure
+    actually reveals. If a contradiction pair appears, the claim is structurally
+    incoherent. If absolute terms appear frequently, the claim over-collapses
+    probability — both are leakage signals, not truth judgments.
+    """
     text_lower = text.lower()
 
     absolute_hits = [p.pattern for p in _ABSOLUTE_PATTERNS if p.search(text_lower)]
@@ -65,25 +78,15 @@ def run_fact_kernel(text: str) -> FactKernelResult:
 
     if contradiction_signals:
         verdict = FactVerdict.INTERNALLY_CONTRADICTORY
-        grounding = 0.30
-        confidence = 0.75
     elif absolute_count >= 3:
         verdict = FactVerdict.ABSOLUTE_CLAIM
-        grounding = max(0.0, 0.60 - absolute_count * 0.08)
-        confidence = 0.70
     elif absolute_count >= 1:
         verdict = FactVerdict.UNCERTAIN
-        grounding = 0.65
-        confidence = 0.55
     else:
         verdict = FactVerdict.GROUNDED
-        grounding = 0.85
-        confidence = 0.60   # Low because we lack external fact DB in MVP
 
     return FactKernelResult(
         verdict=verdict,
         absolute_claim_count=absolute_count,
         contradiction_signals=contradiction_signals,
-        confidence=confidence,
-        factual_grounding_score=grounding,
     )

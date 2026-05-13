@@ -1,11 +1,12 @@
-"""
-Compatibility Layer — New advice must be compatible with:
-- factual reality
-- non-harm
-- moral guidance
-- user context
-- long-term wellbeing
-- emotional stability
+﻿"""compatibility_layer.py — Checks advice direction against core blueprint and non-harm.
+
+Y Theory: advice is compatible when it reinforces the identity's closure.
+Two real signals exist at this stage:
+  fit_with_core_blueprint = moral alignment score (from moral_kernel)
+  fit_with_non_harm       = 1.0 if safe, 0.0 if blocked
+
+Everything else is not measured — fit_with_user_values and fit_with_factual_reality
+are not available from real data. They are accepted as legacy params but not used.
 """
 
 from __future__ import annotations
@@ -15,50 +16,45 @@ from dataclasses import dataclass
 
 @dataclass
 class CompatibilityInput:
-    fit_with_core_blueprint: float = 0.0    # alignment with centralized base pattern
-    fit_with_user_values: float = 0.0       # alignment with user's stated values/goals
-    fit_with_factual_reality: float = 0.0   # factual accuracy score
-    fit_with_non_harm: float = 0.0          # non-harm check score
+    fit_with_core_blueprint: float = 0.0  # moral alignment: 0-1
+    fit_with_non_harm: float = 0.0        # 0.0 if blocked, 1.0 if safe
+    # Legacy params — accepted for call-site compat, not used
+    fit_with_user_values: float = 0.0
+    fit_with_factual_reality: float = 0.0
 
 
 @dataclass
 class CompatibilityResult:
     compatibility_score: float
-    bonus: float                # positive contribution to advice_stability_score
-    is_incompatible: bool       # True → must not use this advice direction
+    bonus: float
+    is_incompatible: bool
     reason: str
 
 
-COMPATIBILITY_BLOCK_THRESHOLD = 0.30  # below this = incompatible
+COMPATIBILITY_BLOCK_THRESHOLD = 0.30
 
 
 def compute_compatibility(inp: CompatibilityInput) -> CompatibilityResult:
-    """
-    Compute the compatibility of a proposed advice direction.
+    """Compatibility from the two real inputs: blueprint alignment and non-harm.
 
-    Blueprint compatibility carries highest weight — it anchors to the
-    low-leakage base pattern.
+    Y Theory: compatible = the advice direction reinforces rather than leaks.
+    Blueprint (moral alignment) + non-harm are the only real R signals here.
+    Score = average of the two. If either is 0 (blocked), score collapses.
     """
     score = (
-        inp.fit_with_core_blueprint * 0.35
-        + inp.fit_with_user_values * 0.20
-        + inp.fit_with_factual_reality * 0.25
-        + inp.fit_with_non_harm * 0.20
-    )
-    score = max(0.0, min(1.0, score))
-    bonus = score * 0.20
+        max(0.0, min(1.0, inp.fit_with_core_blueprint))
+        + max(0.0, min(1.0, inp.fit_with_non_harm))
+    ) / 2.0
 
+    bonus = score * 0.20
     is_incompatible = score < COMPATIBILITY_BLOCK_THRESHOLD
 
     if is_incompatible:
-        reason = (
-            "Advice direction is incompatible with the Core Blueprint or non-harm requirements. "
-            "Cannot proceed with this direction."
-        )
+        reason = "Incompatible: blueprint or non-harm requirement not met."
     elif score < 0.60:
-        reason = "Partial compatibility — include caveats and monitor response carefully."
+        reason = "Partial compatibility — include caveats."
     else:
-        reason = "Compatible with Core Blueprint and user context."
+        reason = "Compatible with Core Blueprint."
 
     return CompatibilityResult(
         compatibility_score=score,

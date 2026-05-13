@@ -1,4 +1,4 @@
-"""
+﻿"""
 Residual Novelty — What the current identity structure cannot absorb.
 
 Every new user input creates residual novelty:
@@ -97,3 +97,4 @@ def _build_result(score: float) -> ResidualNoveltyResult:
         requires_clarification=requires_clarification,
         summary=summary,
     )
+

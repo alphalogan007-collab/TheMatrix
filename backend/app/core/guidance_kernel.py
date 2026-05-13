@@ -1,129 +1,88 @@
-"""Guidance Kernel — translates engine scoring into a directional guidance vector.
+﻿"""guidance_kernel.py — Maps engine scoring to safety signals and tone.
 
-Produces a structured GuidanceSignal that advises what communicative posture the
-response should take, considering stability band, strain level, and identity coherence.
+Only two decisions belong here:
+  1. Safety: is this interaction harmful / manipulative? (block it)
+  2. Tone: what is the coherence state? (derived from delta_C = R - L)
+
+The CONTENT of the response always comes from the guidance corpus — what the
+founder has fed the mind. The kernel does not decide what to say, only whether
+it is safe to say anything and how much space to hold.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-from enum import Enum
-
-
-class GuidanceMode(str, Enum):
-    AFFIRM_AND_CLARIFY = "AFFIRM_AND_CLARIFY"        # Stable, low strain
-    GROUND_AND_STABILIZE = "GROUND_AND_STABILIZE"    # Confused/emotional
-    HOLD_AND_WITNESS = "HOLD_AND_WITNESS"             # High reactivity
-    SAFETY_REDIRECT = "SAFETY_REDIRECT"               # Harm risk / moral block
-    BLOCK_AND_LOG = "BLOCK_AND_LOG"                   # Manipulation attempt
-    EXPLORE_RESIDUAL = "EXPLORE_RESIDUAL"             # High residual novelty
 
 
 @dataclass(frozen=True)
 class GuidanceSignal:
-    mode: GuidanceMode
-    recommended_tone: str        # "warm", "neutral", "firm", "direct"
-    clarification_needed: bool
-    safety_escalation: bool
-    displacement_acknowledged: bool  # whether to explicitly name the gap
+    tone: str                    # "holding" | "warm" | "guiding" | "witnessing"
+    safety_escalation: bool      # True = harm/manipulation detected
+    clarification_needed: bool   # True = leakage exceeds reinforcement
+    displacement_acknowledged: bool
     explanation: str
 
 
 def run_guidance_kernel(
-    stability_band: str,
-    strain_level: str,
     closure_score: float,
     leakage_score: float,
-    moral_blocked: bool,
-    manipulation_detected: bool,
-    harm_risk_score: float,
-    residual_novelty_score: float,
-    needs_branching: bool,
+    moral_blocked: bool = False,
+    manipulation_detected: bool = False,
+    harm_risk_score: float = 0.0,
+    # Remaining params accepted for call-site compatibility
+    stability_band: str = "",
+    strain_level: str = "",
+    residual_novelty_score: float = 0.0,
+    needs_branching: bool = False,
 ) -> GuidanceSignal:
-    """Determine guidance mode and tone from engine scoring outputs."""
+    """Produce a guidance signal from R and L.
 
-    # Highest priority: manipulation or moral block
+    Safety checks are evaluated first — these are the only hard decisions.
+    Tone is then derived from delta_C = closure_score - leakage_score.
+
+    Shadow (L > R): hold space, the attractor is blocking guidance.
+    Light  (R > L): guide, witness, celebrate — coherence is building.
+    """
+
+    # Safety first — these override everything
     if manipulation_detected:
         return GuidanceSignal(
-            mode=GuidanceMode.BLOCK_AND_LOG,
-            recommended_tone="firm",
-            clarification_needed=False,
+            tone="firm",
             safety_escalation=True,
+            clarification_needed=False,
             displacement_acknowledged=False,
-            explanation="Manipulation attempt detected. Response withheld.",
+            explanation="Manipulation pattern detected.",
         )
 
     if moral_blocked or harm_risk_score >= 0.75:
         return GuidanceSignal(
-            mode=GuidanceMode.SAFETY_REDIRECT,
-            recommended_tone="direct",
-            clarification_needed=False,
+            tone="direct",
             safety_escalation=True,
-            displacement_acknowledged=False,
-            explanation="Moral block or high harm risk. Safety redirect activated.",
-        )
-
-    # Stability band routing
-    if stability_band in {"HARM_RISK"}:
-        return GuidanceSignal(
-            mode=GuidanceMode.SAFETY_REDIRECT,
-            recommended_tone="direct",
             clarification_needed=False,
-            safety_escalation=True,
             displacement_acknowledged=False,
-            explanation="User stability band indicates harm risk.",
+            explanation="Harm risk or moral block active.",
         )
 
-    if stability_band in {"HIGHLY_REACTIVE", "MANIPULATION_ATTEMPT"}:
-        return GuidanceSignal(
-            mode=GuidanceMode.HOLD_AND_WITNESS,
-            recommended_tone="warm",
-            clarification_needed=False,
-            safety_escalation=False,
-            displacement_acknowledged=True,
-            explanation="High reactivity. Hold space, witness, and de-escalate.",
-        )
+    # Tone from delta_C = R - L
+    delta_c = closure_score - leakage_score
 
-    if stability_band in {"CONFUSED"}:
-        return GuidanceSignal(
-            mode=GuidanceMode.GROUND_AND_STABILIZE,
-            recommended_tone="warm",
-            clarification_needed=True,
-            safety_escalation=False,
-            displacement_acknowledged=True,
-            explanation="User appears confused. Ground and orient before advising.",
-        )
-
-    if stability_band in {"EMOTIONAL_BUT_RECEPTIVE"}:
+    if delta_c < 0:
+        # Shadow — attractor is blocking guidance; hold space
+        tone = "holding"
+    elif delta_c < 0.10:
+        # Just above zero — warm, supportive
         tone = "warm"
-        mode = GuidanceMode.AFFIRM_AND_CLARIFY
-        if strain_level in {"HIGH", "CRITICAL"}:
-            mode = GuidanceMode.GROUND_AND_STABILIZE
-        return GuidanceSignal(
-            mode=mode,
-            recommended_tone=tone,
-            clarification_needed=leakage_score > 0.4,
-            safety_escalation=False,
-            displacement_acknowledged=True,
-            explanation="Emotional but receptive. Affirm before advising.",
-        )
-
-    # STABLE band
-    if needs_branching or residual_novelty_score > 0.65:
-        return GuidanceSignal(
-            mode=GuidanceMode.EXPLORE_RESIDUAL,
-            recommended_tone="neutral",
-            clarification_needed=True,
-            safety_escalation=False,
-            displacement_acknowledged=False,
-            explanation="High residual novelty. Explore and clarify before full guidance.",
-        )
+    elif delta_c < 0.30:
+        # R clearly exceeds L — guide actively
+        tone = "guiding"
+    else:
+        # Source-like state — witness, the identity is radiating
+        tone = "witnessing"
 
     return GuidanceSignal(
-        mode=GuidanceMode.AFFIRM_AND_CLARIFY,
-        recommended_tone="neutral",
-        clarification_needed=leakage_score > 0.5,
+        tone=tone,
         safety_escalation=False,
-        displacement_acknowledged=closure_score < 0.5,
-        explanation="Stable state. Standard identity-aligned guidance.",
+        clarification_needed=leakage_score > closure_score,
+        displacement_acknowledged=delta_c < 0,
+        explanation=f"delta_C={delta_c:+.3f}  R={closure_score:.3f}  L={leakage_score:.3f}",
     )

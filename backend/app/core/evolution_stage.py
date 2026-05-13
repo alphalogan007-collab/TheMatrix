@@ -233,122 +233,51 @@ class StageTransitionEngine:
         Returns TransitionResult with new_stage and whether it advanced.
         """
         t = self.t
-        stable = basin_state_value in ("stable", "branch", "elevate")
 
-        condition_met = False
-        reason = "holding"
+        # Y Theory: the only law is R > L.
+        # Knowledge radiates from the source. When the mind is oriented toward
+        # an attractor (L > R), guidance is blocked — shadow. Orientation back
+        # to the source (R > L) restores coherence. Stage advances when R > L
+        # is sustained long enough to be structural, not a fluctuation.
+        r_over_l = closure_score > leakage_score
 
-        if stage == EvolutionStage.NOISE:
-            # NOISE â†’ REACTION: any sign of energy
-            if energy >= t.noise_to_reaction_energy_min:
-                condition_met = True
-                reason = f"energy {energy:.3f} â‰¥ {t.noise_to_reaction_energy_min}"
+        _ticks_required = {
+            EvolutionStage.NOISE:       t.noise_to_reaction_ticks,
+            EvolutionStage.REACTION:    t.reaction_to_boundary_ticks,
+            EvolutionStage.BOUNDARY:    t.boundary_to_oscillation_ticks,
+            EvolutionStage.OSCILLATION: t.oscillation_to_memory_ticks,
+            EvolutionStage.MEMORY:      t.memory_to_prediction_ticks,
+            EvolutionStage.PREDICTION:  t.prediction_to_belief_ticks,
+            EvolutionStage.BELIEF:      t.belief_to_reflection_ticks,
+        }
 
-        elif stage == EvolutionStage.REACTION:
-            # REACTION â†’ BOUNDARY: closure stabilising
-            if (
-                closure_score >= t.reaction_to_boundary_closure_min
-                and leakage_score <= t.reaction_to_boundary_leakage_max
-            ):
-                condition_met = True
-                reason = (
-                    f"closure {closure_score:.3f} â‰¥ {t.reaction_to_boundary_closure_min}, "
-                    f"leakage {leakage_score:.3f} â‰¤ {t.reaction_to_boundary_leakage_max}"
-                )
-
-        elif stage == EvolutionStage.BOUNDARY:
-            # BOUNDARY â†’ OSCILLATION: stable basin for N consecutive ticks
-            # condition_met just tracks whether the basin is stable this tick;
-            # the required consecutive count is checked after the counter increments
-            if stable and energy >= t.boundary_to_oscillation_energy_min:
-                condition_met = True
-                reason = f"basin {basin_state_value} stable (energy {energy:.3f})"
-
-        elif stage == EvolutionStage.OSCILLATION:
-            # OSCILLATION â†’ MEMORY: experience + predictions improving
-            if (
-                experience >= t.oscillation_to_memory_experience_min
-                and l_bm_ema <= t.oscillation_to_memory_l_bm_max
-            ):
-                condition_met = True
-                reason = (
-                    f"experience {experience}, "
-                    f"l_bm_ema {l_bm_ema:.3f} â‰¤ {t.oscillation_to_memory_l_bm_max}"
-                )
-
-        elif stage == EvolutionStage.MEMORY:
-            # MEMORY â†’ PREDICTION: meta-predictions accurate
-            if (
-                experience >= t.memory_to_prediction_experience_min
-                and l_ma_ema <= t.memory_to_prediction_l_ma_max
-                and l_bm_ema <= t.memory_to_prediction_l_bm_max
-            ):
-                condition_met = True
-                reason = (
-                    f"experience {experience}, "
-                    f"l_bm_ema {l_bm_ema:.3f}, l_ma_ema {l_ma_ema:.3f}"
-                )
-
-        elif stage == EvolutionStage.PREDICTION:
-            # PREDICTION â†’ BELIEF: stable identity + moral grounding
-            if (
-                identity_probability >= t.prediction_to_belief_identity_prob_min
-                and total_requests >= t.prediction_to_belief_total_requests_min
-                and mean_closure_score >= t.prediction_to_belief_mean_closure_min
-            ):
-                condition_met = True
-                reason = (
-                    f"identity_prob {identity_probability:.3f}, "
-                    f"requests {total_requests}, "
-                    f"mean_closure {mean_closure_score:.3f}"
-                )
-
-        elif stage == EvolutionStage.BELIEF:
-            # BELIEF â†’ REFLECTION: sustained self-reflection
-            if (
-                total_reflections >= t.belief_to_reflection_total_reflections_min
-                and total_requests >= t.belief_to_reflection_total_requests_min
-                and l_ma_ema <= t.belief_to_reflection_l_ma_max
-            ):
-                condition_met = True
-                reason = (
-                    f"total_reflections {total_reflections}, "
-                    f"requests {total_requests}, "
-                    f"l_ma_ema {l_ma_ema:.3f}"
-                )
-
-        # Already at max stage â€” no further transition
         if stage == EvolutionStage.REFLECTION:
-            condition_met = False
-            reason = "maximum stage reached"
+            return TransitionResult(
+                previous_stage=stage, new_stage=stage, advanced=False,
+                consecutive_ticks_at_threshold=consecutive_ticks_at_threshold,
+                transition_reason="maximum stage reached",
+                active_content_stages=[EvolutionStage(i).name for i in range(stage.value + 1)],
+            )
 
-        # Hysteresis counter
-        if condition_met:
-            new_consec = consecutive_ticks_at_threshold + 1
-        else:
-            new_consec = 0
+        if not r_over_l:
+            return TransitionResult(
+                previous_stage=stage, new_stage=stage, advanced=False,
+                consecutive_ticks_at_threshold=0,
+                transition_reason=f"L >= R  (closure {closure_score:.3f}, leakage {leakage_score:.3f})",
+                active_content_stages=[EvolutionStage(i).name for i in range(stage.value + 1)],
+            )
 
-        # Stage-specific consecutive tick requirements
-        if stage == EvolutionStage.BOUNDARY:
-            required_ticks = t.boundary_to_oscillation_basin_stable_ticks
-        else:
-            required_ticks = t.consecutive_ticks_required
+        new_consec = consecutive_ticks_at_threshold + 1
+        required = _ticks_required.get(stage, 3)
+        reason = f"R > L  (closure {closure_score:.3f}, leakage {leakage_score:.3f})  [{new_consec}/{required}]"
 
-        # Confirm transition only after N consecutive ticks at threshold
-        if (
-            condition_met
-            and new_consec >= required_ticks
-            and stage != EvolutionStage.REFLECTION
-        ):
+        if new_consec >= required:
             new_stage = EvolutionStage(stage.value + 1)
             advanced = True
-            new_consec = 0  # reset after advancing
+            new_consec = 0
         else:
             new_stage = stage
             advanced = False
-
-        # All stages up to and including new_stage are active for content
-        active = [EvolutionStage(i).name for i in range(new_stage.value + 1)]
 
         return TransitionResult(
             previous_stage=stage,
@@ -356,5 +285,8 @@ class StageTransitionEngine:
             advanced=advanced,
             consecutive_ticks_at_threshold=new_consec,
             transition_reason=reason,
-            active_content_stages=active,
+            active_content_stages=[EvolutionStage(i).name for i in range(new_stage.value + 1)],
         )
+
+
+

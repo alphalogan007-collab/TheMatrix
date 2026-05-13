@@ -66,7 +66,7 @@ async def post_seed_input(
     )
 
 
-
+class WisdomEntry(BaseModel):
     id: str
     mind_name: str
     category: str
@@ -148,89 +148,6 @@ async def get_graph(db: AsyncSessionDep):
             )
         nodes[e.category].weight += 1
 
-        edges.append(GraphEdge(source=e.mind_name, target=e.category, strength=1.0))
-
-    return GraphData(nodes=list(nodes.values()), edges=edges)
-
-
-
-class WisdomEntry(BaseModel):
-    id: str
-    mind_name: str
-    category: str
-    title: str
-    content: str
-    claim_type: str
-    tags: str
-
-
-class GraphNode(BaseModel):
-    id: str
-    label: str
-    type: str   # "angel" | "layer" | "category"
-    weight: int
-
-
-class GraphEdge(BaseModel):
-    source: str
-    target: str
-    strength: float
-
-
-class GraphData(BaseModel):
-    nodes: list[GraphNode]
-    edges: list[GraphEdge]
-
-
-@router.get("/seed/wisdom")
-async def get_wisdom(
-    angel: Optional[str] = Query(None),
-    category: Optional[str] = Query(None),
-    limit: int = Query(50, le=200),
-    db: AsyncSessionDep = None,
-):
-    """Return seed wisdom entries — what the engine has learned so far."""
-    mind_name = _ANGEL_LENSES.get(angel or "", {}).get("mind_name") if angel else None
-    entries = await get_entries(
-        db,
-        mind_name=mind_name,
-        category=category,
-        limit=limit,
-    )
-    return [
-        {
-            "id": str(e.id),
-            "mind_name": e.mind_name,
-            "category": e.category,
-            "title": e.title,
-            "content": e.content[:300],
-            "claim_type": e.claim_type,
-            "tags": e.tags or "",
-        }
-        for e in entries
-    ]
-
-
-@router.get("/seed/graph", response_model=GraphData)
-async def get_graph(db: AsyncSessionDep):
-    """Return graph nodes + edges built from all seeded wisdom."""
-    entries = await get_entries(db, mind_name=None, category=None, limit=500)
-
-    nodes: dict[str, GraphNode] = {}
-    edges: list[GraphEdge] = []
-
-    for e in entries:
-        # Angel node
-        if e.mind_name not in nodes:
-            nodes[e.mind_name] = GraphNode(id=e.mind_name, label=e.mind_name.replace("_mind",""), type="angel", weight=0)
-        nodes[e.mind_name].weight += 1
-
-        # Category node
-        if e.category not in nodes:
-            nodes[e.category] = GraphNode(id=e.category, label=e.category, type="category", weight=0)
-        nodes[e.category].weight += 1
-
-        # Edge: angel → category
         edges.append(GraphEdge(source=e.mind_name, target=e.category, strength=1.0))
 
     return GraphData(nodes=list(nodes.values()), edges=edges)

@@ -1,31 +1,56 @@
-"""llm_router.py — LLM removed from this architecture.
+"""llm_router.py — Ollama gateway.
 
-This system learns by mining data (Wikipedia, DuckDuckGo, YouTube).
-The mind builds knowledge from real-world sources, not language models.
-No LLM providers are configured. No API keys are used.
+Single entry point for all language model calls. Routes that need text
+generation import this module instead of calling httpx directly.
 
-All calls to chat() / chat_skip_ollama() / ask() are no-ops that raise
-immediately so any caller that missed the memo fails loudly.
+  Endpoint: http://matrix_ollama:11434   (hardcoded — same container network)
+  Model:    llama3.2 (overridable via OLLAMA_MODEL env var)
 """
 
 from __future__ import annotations
 
+import os
 from typing import Dict, List, Optional, Tuple
 
+import httpx
 
-# ---------------------------------------------------------------------------
-# Stubs — nothing here calls an external API
-# ---------------------------------------------------------------------------
+OLLAMA_URL   = "http://matrix_ollama:11434"
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
 
 
 def provider_status() -> Dict[str, dict]:
-    """Return empty provider status — no LLM providers configured."""
-    return {}
+    return {"ollama": {"url": OLLAMA_URL, "model": OLLAMA_MODEL}}
 
 
 def active_provider() -> Optional[str]:
-    """No LLM providers are active in this architecture."""
-    return None
+    return "ollama"
+
+
+async def ask(
+    prompt: str,
+    *,
+    max_tokens: int = 1000,
+    temperature: float = 0.4,
+    api_key: str = "",   # accepted for call-site compatibility, not used
+    model: str = "",
+) -> str:
+    """Send a single prompt to Ollama. Returns the response text."""
+    effective_model = model or OLLAMA_MODEL
+    async with httpx.AsyncClient(timeout=60) as client:
+        resp = await client.post(
+            f"{OLLAMA_URL}/api/generate",
+            json={
+                "model":   effective_model,
+                "prompt":  prompt,
+                "stream":  False,
+                "options": {
+                    "temperature": temperature,
+                    "num_predict": max_tokens,
+                },
+            },
+        )
+        resp.raise_for_status()
+        return resp.json().get("response", "")
 
 
 async def chat(
@@ -33,11 +58,13 @@ async def chat(
     max_tokens: int = 1000,
     temperature: float = 0.4,
 ) -> Tuple[str, str]:
-    """Not used. This architecture learns from mined data, not LLMs."""
-    raise RuntimeError(
-        "LLM is not used in this architecture. "
-        "Knowledge comes from Wikipedia/DuckDuckGo/YouTube mining."
+    """Send a message list to Ollama. Returns (response_text, model_name)."""
+    prompt = "\n".join(
+        f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content']}"
+        for m in messages
     )
+    text = await ask(prompt, max_tokens=max_tokens, temperature=temperature)
+    return text, OLLAMA_MODEL
 
 
 async def chat_skip_ollama(
@@ -45,45 +72,5 @@ async def chat_skip_ollama(
     max_tokens: int = 1000,
     temperature: float = 0.4,
 ) -> Tuple[str, str]:
-    """Not used. This architecture learns from mined data, not LLMs."""
-    raise RuntimeError(
-        "LLM is not used in this architecture. "
-        "Knowledge comes from Wikipedia/DuckDuckGo/YouTube mining."
-    )
-
-
-async def ask(
-    prompt: str,
-    *,
-    max_tokens: int = 1000,
-    temperature: float = 0.4,
-    api_key: str = "",
-    model: str = "",
-) -> str:
-    """Not used. This architecture learns from mined data, not LLMs."""
-    raise RuntimeError(
-        "LLM is not used in this architecture. "
-        "Knowledge comes from Wikipedia/DuckDuckGo/YouTube mining."
-    )
-
-
-async def ask(
-    prompt: str,
-    *,
-    max_tokens: int = 1000,
-    temperature: float = 0.4,
-    # Legacy params — accepted but ignored; router reads keys from settings
-    api_key: str = "",
-    model: str = "",
-) -> str:
-    """Drop-in replacement for a direct OpenAI call.
-
-    api_key and model are accepted for backwards-compatible call sites but
-    the router always uses the live settings + provider priority list.
-    """
-    text, _ = await chat(
-        [{"role": "user", "content": prompt}],
-        max_tokens=max_tokens,
-        temperature=temperature,
-    )
-    return text
+    """Alias for chat() — kept for call-site compatibility."""
+    return await chat(messages, max_tokens=max_tokens, temperature=temperature)

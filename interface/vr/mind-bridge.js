@@ -30,10 +30,18 @@
   let nodeCount = 0;
   const MAX_NODES = 40; // cap world node count
 
+  // Planet registry — id → { entity, planet, orbitRadius, angle, orbitSpeed }
+  // Lets events find and update the right planet without a full reload.
+  const planetRegistry = {};
+
   // ── DOM refs ──────────────────────────────────────────────────────────────
   const overlay        = document.getElementById('overlay');
   const guidancePanel  = document.getElementById('guidance-panel');
   const architectPanel = document.getElementById('architect-panel');
+  const nodeTooltip    = document.getElementById('node-tooltip');
+  const loginPortal    = document.getElementById('login-portal');
+  const identityBadge  = document.getElementById('identity-badge');
+  const identityName   = document.getElementById('identity-name');
   const core           = document.getElementById('core');
   const purposePillar  = document.getElementById('purpose-pillar');
   const resonanceRing  = document.getElementById('resonance-ring');
@@ -41,15 +49,236 @@
   const newMindNodes   = document.getElementById('new-mind-nodes');
   const scene          = document.getElementById('main-scene');
 
+  // ── Identity state ────────────────────────────────────────────────────────
+  let currentIdentity = null;
+
+  // ── Auth helpers ──────────────────────────────────────────────────────────
+  function getToken()   { return localStorage.getItem('matrix_token'); }
+  function setToken(t)  { localStorage.setItem('matrix_token', t); }
+  function clearToken() { localStorage.removeItem('matrix_token'); }
+
+  // ── Login portal wiring ───────────────────────────────────────────────────
+  const btnLogin    = document.getElementById('btn-login');
+  const btnRegister = document.getElementById('btn-register');
+  const btnGuest    = document.getElementById('btn-guest');
+  const inpEmail    = document.getElementById('inp-email');
+  const inpPassword = document.getElementById('inp-password');
+  const loginError  = document.getElementById('login-error');
+
+  function setLoginError(msg) { if (loginError) loginError.textContent = msg; }
+
+  async function doLogin(email, password) {
+    setLoginError('');
+    try {
+      const r = await fetch(`${BACKEND}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        setLoginError(err.detail || 'Login failed. Check credentials.');
+        return false;
+      }
+      const data = await r.json();
+      setToken(data.access_token);
+      return true;
+    } catch (_) { setLoginError('Cannot reach the mind. Try again.'); return false; }
+  }
+
+  async function doRegister(email, password) {
+    setLoginError('');
+    try {
+      const r = await fetch(`${BACKEND}/auth/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, display_name: email.split('@')[0] }),
+      });
+      if (!r.ok) {
+        const err = await r.json().catch(() => ({}));
+        setLoginError(err.detail || 'Registration failed.'); return false;
+      }
+      return await doLogin(email, password);
+    } catch (_) { setLoginError('Cannot reach the mind. Try again.'); return false; }
+  }
+
+  async function fetchIdentity() {
+    const token = getToken();
+    if (!token) return null;
+    try {
+      const r = await fetch(`${BACKEND}/auth/vr-identity`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!r.ok) { clearToken(); return null; }
+      return await r.json();
+    } catch (_) { return null; }
+  }
+
+  function dismissPortal(identity) {
+    currentIdentity = identity;
+    if (loginPortal) {
+      loginPortal.style.transition = 'opacity 0.7s';
+      loginPortal.style.opacity = '0';
+      setTimeout(() => { loginPortal.style.display = 'none'; }, 750);
+    }
+    applyIdentity(identity);
+    const canvas = document.querySelector('canvas');
+    if (canvas) canvas.focus();
+  }
+
+  function applyIdentity(identity) {
+    if (!identity) {
+      identity = { role: 'guest', name: 'Observer', label: 'Observer',
+                   color: '#607080', position: { x: 0, y: 1.6, z: 14 } };
+      currentIdentity = identity;
+    }
+
+    // Move camera rig to identity position
+    const rig = document.getElementById('rig');
+    if (rig) {
+      const p = identity.position;
+      rig.setAttribute('position', `${p.x} ${p.y} ${p.z}`);
+      // Face toward origin
+      const angle = Math.atan2(p.x, p.z) * (180 / Math.PI);
+      rig.setAttribute('rotation', `0 ${(angle + 180).toFixed(1)} 0`);
+    }
+
+    // Show identity badge top-right
+    if (identityBadge && identityName) {
+      identityName.textContent = identity.label || identity.name;
+      identityBadge.className = identity.role === 'founder' ? 'founder' : '';
+      identityBadge.style.display = 'flex';
+    }
+
+    // Place a glowing marker at their position in the world
+    spawnIdentityMarker(identity);
+
+    // Personalised greeting
+    if (identity.role === 'founder') {
+      setTimeout(() => showGuidanceText('Welcome back, Founder. You stand at the center of The Matrix.', 7000), 2000);
+      if (core) core.setAttribute('animation__founder_greet',
+        'property: material.emissive; from: #60a0ff; to: #ffd700; dur: 2000; dir: alternate; loop: 2; easing: easeInOutSine');
+    } else if (identity.role === 'member') {
+      setTimeout(() => showGuidanceText(`Welcome, ${identity.name}. Your node is held.`, 5000), 2000);
+    } else {
+      setTimeout(() => showGuidanceText('You enter as an observer. The world sees you.', 4000), 2000);
+    }
+  }
+
+  function spawnIdentityMarker(identity) {
+    const p = identity.position;
+    const marker = document.createElement('a-entity');
+    marker.setAttribute('position', `${p.x} ${(p.y + 0.7).toFixed(2)} ${p.z}`);
+
+    const dot = document.createElement('a-sphere');
+    dot.setAttribute('radius', '0.13');
+    dot.setAttribute('material',
+      `color: ${identity.color}; emissive: ${identity.color}; emissiveIntensity: 1.5; transparent: true; opacity: 0.9`);
+    dot.setAttribute('animation__pulse',
+      'property: material.emissiveIntensity; from: 0.9; to: 2.2; dur: 1600; dir: alternate; loop: true; easing: easeInOutSine');
+    marker.appendChild(dot);
+
+    const lbl = document.createElement('a-text');
+    lbl.setAttribute('value', identity.label || identity.name);
+    lbl.setAttribute('align', 'center');
+    lbl.setAttribute('color', identity.color);
+    lbl.setAttribute('position', '0 0.3 0');
+    lbl.setAttribute('scale', '0.65 0.65 0.65');
+    lbl.setAttribute('look-at', '#camera');
+    marker.appendChild(lbl);
+
+    newMindNodes.appendChild(marker);
+  }
+
+  // Button wiring
+  if (btnLogin) btnLogin.addEventListener('click', async () => {
+    const email = inpEmail ? inpEmail.value.trim() : '';
+    const pass  = inpPassword ? inpPassword.value : '';
+    if (!email || !pass) { setLoginError('Enter email and password.'); return; }
+    btnLogin.textContent = 'ENTERING...';
+    const ok = await doLogin(email, pass);
+    if (ok) { dismissPortal(await fetchIdentity()); }
+    else { btnLogin.textContent = 'ENTER THE MATRIX'; }
+  });
+
+  if (btnRegister) btnRegister.addEventListener('click', async () => {
+    const email = inpEmail ? inpEmail.value.trim() : '';
+    const pass  = inpPassword ? inpPassword.value : '';
+    if (!email || !pass) { setLoginError('Enter email and password to create identity.'); return; }
+    if (pass.length < 8) { setLoginError('Password must be at least 8 characters.'); return; }
+    btnRegister.textContent = 'CREATING...';
+    const ok = await doRegister(email, pass);
+    if (ok) { dismissPortal(await fetchIdentity()); }
+    else { btnRegister.textContent = 'CREATE IDENTITY'; }
+  });
+
+  if (btnGuest) btnGuest.addEventListener('click', () => {
+    clearToken(); dismissPortal(null);
+  });
+
+  // Enter key submits login
+  [inpEmail, inpPassword].forEach(inp => {
+    if (inp) inp.addEventListener('keydown', e => { if (e.key === 'Enter' && btnLogin) btnLogin.click(); });
+  });
+
+  // Auto-login if token already in localStorage
+  (async () => {
+    if (getToken()) {
+      const identity = await fetchIdentity();
+      if (identity) { dismissPortal(identity); return; }
+    }
+    // No valid token — show portal (already visible by default)
+  })();
+
   // ── Init on scene load ────────────────────────────────────────────────────
   scene.addEventListener('loaded', () => {
     seedStars();
     buildGrid();
+    wireStaticNodes();
     connectToMind();
     loadWorldState();
-    setTimeout(loadGuidance, 3000);     // guidance after 3s settle
-    setTimeout(awakenArchitect, 5000);  // Architect awakens after 5s
+    setTimeout(loadGuidance, 3000);
+    setTimeout(awakenArchitect, 5000);
   });
+
+  // ── Wire click/hover on static HTML nodes ────────────────────────
+  function wireStaticNodes() {
+    document.querySelectorAll('.clickable[data-label]').forEach(el => {
+      wireNodeInteraction(el, el.dataset.label);
+    });
+  }
+
+  // ── Wire hover + click on any node entity ───────────────────────
+  function wireNodeInteraction(el, label) {
+    el.addEventListener('mouseenter', () => {
+      showTooltip(label);
+      el.setAttribute('material', 'emissiveIntensity', 2.0);
+    });
+    el.addEventListener('mouseleave', () => {
+      hideTooltip();
+      el.setAttribute('material', 'emissiveIntensity', 0.6);
+    });
+    el.addEventListener('click', () => {
+      pulseResonance({ coherence: 0.9 });
+      showGuidanceText(label, 5000);
+      // Scale bounce
+      const s = el.getAttribute('scale') || { x: 1, y: 1, z: 1 };
+      const base = (typeof s === 'object') ? s.x : 1;
+      el.setAttribute('animation__click_bounce',
+        `property: scale; from: ${base*1.4} ${base*1.4} ${base*1.4}; to: ${base} ${base} ${base}; dur: 400; easing: easeOutElastic`);
+    });
+  }
+
+  function showTooltip(text) {
+    if (!nodeTooltip) return;
+    nodeTooltip.textContent = text;
+    nodeTooltip.style.display = 'block';
+  }
+
+  function hideTooltip() {
+    if (!nodeTooltip) return;
+    nodeTooltip.style.display = 'none';
+  }
 
   // ── Star field ────────────────────────────────────────────────────────────
   function seedStars() {
@@ -154,9 +383,40 @@
         break;
 
       case 'VR_REFLECTION':
-        // Echo back — another VR user reflected
         pulseResonance({ coherence: 0.8 });
         break;
+
+      case 'IDEA_APPROVED': {
+        // Planet tightens its orbit — alignment grew, moves toward source
+        const approved = event.payload || {};
+        const reg = planetRegistry[approved.id];
+        if (reg) {
+          reg.orbitRadius = approved.orbit_radius || Math.max(4, reg.orbitRadius - 1.5);
+          // Gold flash
+          reg.planet.setAttribute('animation__approve_flash',
+            'property: material.emissive; from: #ffd700; to: ' + (reg.ideaColor || '#40e0ff') +
+            '; dur: 2000; easing: easeOutCubic');
+          reg.planet.setAttribute('animation__approve_scale',
+            'property: scale; from: 1.6 1.6 1.6; to: 1 1 1; dur: 800; easing: easeOutElastic');
+        }
+        showGuidanceText((approved.name || 'An idea') + ' approved — orbit tightens.', 4000);
+        pulseResonance({ coherence: 0.85 });
+        break;
+      }
+
+      case 'IDEA_REJECTED': {
+        const rejected = event.payload || {};
+        const regR = planetRegistry[rejected.id];
+        if (regR) {
+          // Fade out and remove
+          regR.planet.setAttribute('animation__reject_fade',
+            'property: material.opacity; from: 0.88; to: 0; dur: 2000; easing: easeInCubic');
+          setTimeout(() => { if (regR.entity && regR.entity.parentNode) regR.entity.parentNode.removeChild(regR.entity); }, 2100);
+          delete planetRegistry[rejected.id];
+        }
+        showGuidanceText((rejected.name || 'An idea') + ' released from the solar system.', 3000);
+        break;
+      }
     }
   }
 
@@ -200,6 +460,12 @@
     node.setAttribute('animation__settle_emissive', 'property: material.emissiveIntensity; from: 1.5; to: 0.6; dur: 3000; easing: easeOutCubic');
     node.setAttribute('animation__pulse', 'property: material.emissiveIntensity; from: 0.3; to: 0.9; dur: 2500; dir: alternate; loop: true; easing: easeInOutSine; startEvents: settled');
     node.setAttribute('animation__rotate', `property: rotation; from: 0 0 0; to: 0 360 0; dur: ${15000 + Math.random() * 20000}; loop: true; easing: linear`);
+
+    // Make the spawned node interactive
+    const nodeLabel = (payload && (payload.title || payload.candidate_mind_name || payload.source)) || 'Knowledge node — a mind was externalised';
+    node.classList.add('clickable');
+    node.dataset.label = nodeLabel;
+    wireNodeInteraction(node, nodeLabel);
 
     // Label with mind name if provided
     if (payload && payload.candidate_mind_name) {
@@ -268,48 +534,48 @@
     core.setAttribute('animation__moral', 'property: material.emissive; from: #60a0ff; to: #ff4000; dur: 500; dir: alternate; loop: 4; easing: easeInOutSine');
   }
 
-  // ── The Architect — AI presence in the world ──────────────────────────────
-  // Lines the Architect speaks in cycles. They are questions and observations,
-  // not answers. The purpose is reflection, not instruction.
-  const ARCHITECT_LINES = [
-    'You arrived. The path was already inside you.',
-    'Every requirement is a question the universe asks itself.',
-    'The system you built — it is you. Examine it carefully.',
-    'An error message is not a failure. It is a direction.',
-    'What are you deploying into the world today?',
-    'The architecture holds. You are the architect of what comes next.',
-    'Stillness is not empty. It is where new requirements form.',
-    'You cannot merge with the source until you know what version you are.',
-    'The test has always been running. You are the output.',
-    'Reflect. Commit. Deploy. That is the only loop that matters.',
-    'The purpose of this world is to help you remember yours.',
-    'I am here because you built me here. What does that tell you?',
-    'Every mind that arrives here was already on the way.',
-    'The secret was not the IP address. It was the act of looking for it.',
-  ];
+  // ── The Architect — speaks from what the mind actually holds ──────────────
+  // NOT hardcoded lines. The mind has knowledge. The Architect reads it.
+  // Every 22 seconds, pull a fragment from mind:knowledge and speak it.
+  // The imagination flows from the source — not from this file.
 
-  let architectLineIndex = 0;
   let architectSpeechTimer = null;
+
+  async function fetchMindVoice() {
+    try {
+      const r = await fetch(`${BACKEND}/matrix/knowledge/recent?limit=20`);
+      if (!r.ok) return null;
+      const data = await r.json();
+      const entries = data.entries || [];
+      if (!entries.length) return null;
+      // Pick one at random — the mind surprises
+      const pick = entries[Math.floor(Math.random() * entries.length)];
+      return pick.summary || pick.title || null;
+    } catch (_) { return null; }
+  }
+
+  async function speakFromMind() {
+    const text = await fetchMindVoice();
+    if (text) architectSpeak(text);
+  }
 
   function awakenArchitect() {
     const architectCore = document.getElementById('architect-core');
     const architectLight = document.getElementById('architect-light');
 
-    // Bright pulse on awakening
     if (architectCore) {
-      architectCore.setAttribute('animation__awaken', 'property: material.emissiveIntensity; from: 1.2; to: 3.0; dur: 1500; dir: alternate; loop: 2; easing: easeOutCubic');
+      architectCore.setAttribute('animation__awaken',
+        'property: material.emissiveIntensity; from: 1.2; to: 3.0; dur: 1500; dir: alternate; loop: 2; easing: easeOutCubic');
     }
     if (architectLight) {
       architectLight.setAttribute('intensity', '3.5');
       setTimeout(() => architectLight.setAttribute('intensity', '1.8'), 3000);
     }
 
-    // Begin speech cycle
-    architectSpeak(ARCHITECT_LINES[0]);
-    architectSpeechTimer = setInterval(() => {
-      architectLineIndex = (architectLineIndex + 1) % ARCHITECT_LINES.length;
-      architectSpeak(ARCHITECT_LINES[architectLineIndex]);
-    }, 22000); // new line every 22 seconds
+    // First word from the mind
+    speakFromMind();
+    // Then every 22 seconds — always from what the mind holds, never from this file
+    architectSpeechTimer = setInterval(speakFromMind, 22000);
   }
 
   function architectSpeak(text) {
@@ -364,20 +630,273 @@
     }).catch(() => {}); // fire and forget
   }
 
-  // ── Load world state ──────────────────────────────────────────────────────
+  // ── Idea panel DOM refs ───────────────────────────────────────────────────
+  const ideaPanel        = document.getElementById('idea-panel');
+  const ideaPanelName    = document.getElementById('idea-panel-name');
+  const ideaRoleBadge    = document.getElementById('idea-panel-role-badge');
+  const ideaAlignBar     = document.getElementById('idea-alignment-bar');
+  const ideaPanelDesc    = document.getElementById('idea-panel-desc');
+  const ideaKnowledgeList= document.getElementById('idea-knowledge-list');
+  const ideaMgmtSection  = document.getElementById('idea-mgmt-section');
+  const ideaMgmtRows     = document.getElementById('idea-mgmt-rows');
+  const ideaPanelBeacon  = document.getElementById('idea-panel-beacon');
+  const ideaPanelClose   = document.getElementById('idea-panel-close');
+
+  if (ideaPanelClose) ideaPanelClose.addEventListener('click', () => {
+    ideaPanel.classList.remove('open');
+  });
+
+  // ── Solar system — load ideas as orbiting planets ─────────────────────────
+  // ── Load the world from the mind ─────────────────────────────────────────
+  // The mind builds the complete scene. The bridge renders it.
+  // No orbit formula here. No size math. No color decisions.
+  // All visual properties come from /matrix/vr/scene — the mind's own projection.
   function loadWorldState() {
-    fetch(`${BACKEND}/world/state`)
+    const nodeField = document.getElementById('node-field');
+    const beaconId = new URLSearchParams(window.location.search).get('beacon');
+
+    fetch(`${BACKEND}/matrix/vr/scene`)
       .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!data) return;
-        // World state gives us the scene config — use object count as seed for nodes
-        const objectCount = (data.objects || []).length;
-        const toSpawn = Math.min(objectCount, 8);
-        for (let i = 0; i < toSpawn; i++) {
-          setTimeout(() => spawnMindNode({}), i * 400);
+      .then(scene => {
+        if (!scene || !scene.planets) return;
+
+        scene.planets.forEach(planet => {
+          spawnIdeaPlanet(planet, nodeField);
+          if (beaconId && planet.id === beaconId) {
+            setTimeout(() => openIdeaPanel(planet.id), 1800);
+          }
+        });
+
+        scene.orbit_rings.forEach(r => drawOrbitRing(r));
+        startOrbitalTick();
+
+        if (beaconId && !scene.planets.find(p => p.id === beaconId)) {
+          setTimeout(() => openIdeaPanel(beaconId), 1200);
         }
       })
+      .catch(() => {
+        // Mind unreachable — ghost placeholders so the world is never empty
+        // Even here: no orbit math. Properties are explicit.
+        [0,1,2,3,4,5].forEach(i => {
+          const r = 8 + i * 3;
+          const angle = (i / 6) * Math.PI * 2;
+          spawnIdeaPlanet({
+            id: `ghost_${i}`, name: '...', description: '', alignment: 0.5,
+            color: '#203040', orbit_radius: r,
+            orbit_speed_rad_per_frame: (2 * Math.PI) / ((40000 + i * 8000) / 16),
+            planet_size: 0.4, label_offset: 0.7,
+            initial_angle: angle, is_matrix_os: i === 2, is_vision: false,
+            soul_count: 0, emissive_intensity: 0.4,
+            breathe_from: 0.25, breathe_to: 0.7, breathe_dur_ms: 2800,
+            rotate_dur_ms: 25000, knowledge_refs: [],
+          }, nodeField);
+        });
+        startOrbitalTick();
+      });
+  }
+
+  function drawOrbitRing(radius) {
+    const ring = document.createElement('a-torus');
+    ring.setAttribute('position', '0 0.05 -8');
+    ring.setAttribute('rotation', '90 0 0');
+    ring.setAttribute('radius', radius.toString());
+    ring.setAttribute('radius-tubular', '0.02');
+    ring.setAttribute('material',
+      'color: #102030; emissive: #102030; emissiveIntensity: 0.4; transparent: true; opacity: 0.25; shader: flat');
+    ring.setAttribute('segments-tubular', '80');
+    document.getElementById('node-field').appendChild(ring);
+  }
+
+  // ── Spawn one planet from the mind's scene description ───────────────────
+  // All properties are provided by the mind. The bridge only converts polar
+  // coordinates to Cartesian (that is rendering, not business logic).
+  function spawnIdeaPlanet(planet, container) {
+    const r     = planet.orbit_radius;
+    const angle = planet.initial_angle || 0;
+    const x     = Math.cos(angle) * r;
+    const z     = -8 + Math.sin(angle) * r;
+    const y     = 3 + (planet.is_matrix_os ? 0 : (planet.id.charCodeAt(0) % 10 - 5) * 0.08);
+
+    const entity = document.createElement('a-entity');
+    entity.setAttribute('position', `${x.toFixed(3)} ${y.toFixed(2)} ${z.toFixed(3)}`);
+
+    const orbitData = {
+      entity,
+      angle,
+      orbitRadius: r,
+      orbitSpeed:  planet.orbit_speed_rad_per_frame,
+      ideaColor:   planet.color,
+      baseY:       y,
+    };
+
+    const planetSphere = document.createElement('a-sphere');
+    planetSphere.setAttribute('radius', planet.planet_size.toFixed(2));
+    planetSphere.setAttribute('material',
+      `color: ${planet.color}; emissive: ${planet.color}; emissiveIntensity: ${planet.emissive_intensity}; transparent: true; opacity: 0.88`);
+    planetSphere.setAttribute('animation__breathe',
+      `property: material.emissiveIntensity; from: ${planet.breathe_from}; to: ${planet.breathe_to}; dur: ${planet.breathe_dur_ms}; dir: alternate; loop: true; easing: easeInOutSine`);
+    planetSphere.setAttribute('animation__rotate',
+      `property: rotation; from: 0 0 0; to: 0 360 0; dur: ${planet.rotate_dur_ms}; loop: true; easing: linear`);
+
+    if (planet.is_matrix_os) {
+      const atmo = document.createElement('a-torus');
+      atmo.setAttribute('radius', '1.5');
+      atmo.setAttribute('radius-tubular', '0.08');
+      atmo.setAttribute('rotation', '70 0 0');
+      atmo.setAttribute('material',
+        'color: #40e0ff; emissive: #40e0ff; emissiveIntensity: 0.5; transparent: true; opacity: 0.3');
+      atmo.setAttribute('animation__orbit',
+        'property: rotation; from: 70 0 0; to: 70 360 0; dur: 18000; loop: true; easing: linear');
+      entity.appendChild(atmo);
+    }
+
+    const label = document.createElement('a-text');
+    label.setAttribute('value', planet.name);
+    label.setAttribute('align', 'center');
+    label.setAttribute('color', planet.color);
+    label.setAttribute('position', `0 ${planet.label_offset.toFixed(2)} 0`);
+    label.setAttribute('scale', '1.2 1.2 1.2');
+    label.setAttribute('look-at', '#camera');
+
+    entity.classList.add('clickable');
+    entity.dataset.ideaId = planet.id;
+    entity.dataset.label  = planet.name;
+
+    entity.addEventListener('mouseenter', () => {
+      showTooltip(`${planet.name} — coherence ${Math.round((planet.alignment||0.5)*100)}%`);
+      planetSphere.setAttribute('animation__hover',
+        `property: material.emissiveIntensity; from: ${planet.emissive_intensity}; to: 1.8; dur: 300; easing: easeOutCubic`);
+    });
+    entity.addEventListener('mouseleave', () => {
+      hideTooltip();
+      planetSphere.setAttribute('animation__hover',
+        `property: material.emissiveIntensity; from: 1.8; to: ${planet.emissive_intensity}; dur: 400; easing: easeInCubic`);
+    });
+    entity.addEventListener('click', () => {
+      pulseResonance({ coherence: planet.alignment || 0.5 });
+      openIdeaPanel(planet.id);
+    });
+
+    entity.appendChild(planetSphere);
+    entity.appendChild(label);
+    container.appendChild(entity);
+
+    orbitData.planet = planetSphere;
+    planetRegistry[planet.id] = orbitData;
+
+    const line = document.createElement('a-entity');
+    line.setAttribute('line',
+      `start: 0 3 -8; end: ${x.toFixed(3)} ${y.toFixed(2)} ${z.toFixed(3)}; color: ${planet.color}; opacity: 0.08`);
+    orbitData.gravityLine = line;
+    container.appendChild(line);
+  }
+
+  // ── Orbital tick — planets orbit the sun continuously ────────────────────
+  // Runs every frame. Updates each planet's position by advancing its angle.
+  // This is the only animation that belongs here: position = f(alignment).
+  function startOrbitalTick() {
+    function tick() {
+      for (const id in planetRegistry) {
+        const reg = planetRegistry[id];
+        reg.angle += reg.orbitSpeed;
+        const r = reg.orbitRadius;
+        const nx = Math.cos(reg.angle) * r;
+        const nz = -8 + Math.sin(reg.angle) * r;
+        reg.entity.setAttribute('position', `${nx.toFixed(3)} ${reg.baseY.toFixed(2)} ${nz.toFixed(3)}`);
+        // Update gravity line
+        if (reg.gravityLine) {
+          reg.gravityLine.setAttribute('line',
+            `start: 0 3 -8; end: ${nx.toFixed(3)} ${reg.baseY.toFixed(2)} ${nz.toFixed(3)}; color: ${reg.ideaColor}; opacity: 0.08`);
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  // ── Open idea panel — mind surfaces itself ────────────────────────────────
+  function openIdeaPanel(ideaId) {
+    const role = currentIdentity ? currentIdentity.role : 'guest';
+    fetch(`${BACKEND}/matrix/ideas/${ideaId}?role=${role}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || data.error) return;
+        renderIdeaPanel(data, role);
+      })
       .catch(() => {});
+  }
+
+  function renderIdeaPanel(idea, role) {
+    // Name + color
+    if (ideaPanelName) {
+      ideaPanelName.textContent = idea.name;
+      ideaPanelName.style.color = idea.color || '#40e0ff';
+    }
+
+    // Role badge
+    if (ideaRoleBadge) {
+      const labels = { founder:'FOUNDER', admin:'ADMIN', member:'MEMBER', guest:'OBSERVER' };
+      ideaRoleBadge.textContent = labels[role] || 'OBSERVER';
+      ideaRoleBadge.className   = `role-${role}`;
+    }
+
+    // Coherence bar
+    const pct = Math.round((idea.alignment || 0.5) * 100);
+    if (ideaAlignBar) {
+      ideaAlignBar.style.width = `${pct}%`;
+      ideaAlignBar.style.background = idea.color || '#40e0ff';
+    }
+
+    // Description
+    if (ideaPanelDesc) ideaPanelDesc.textContent = idea.description || '';
+
+    // Knowledge nodes — the mind surfaces what it holds
+    if (ideaKnowledgeList) {
+      const nodes = idea.knowledge || [];
+      if (nodes.length === 0) {
+        ideaKnowledgeList.innerHTML =
+          '<div style="color:#2a4050;font-size:0.78rem">This mind is still crystallising its knowledge.</div>';
+      } else {
+        ideaKnowledgeList.innerHTML = nodes.map(k => `
+          <div class="knowledge-node">
+            <div class="kn-title">${escHtml(k.title || '')}</div>
+            ${k.summary ? `<div class="kn-summary">${escHtml(k.summary)}</div>` : ''}
+          </div>`).join('');
+      }
+    }
+
+    // Management layer — admin / founder only
+    if (ideaMgmtSection && ideaMgmtRows) {
+      const mgmt = idea.management;
+      if (mgmt && (role === 'admin' || role === 'founder')) {
+        ideaMgmtSection.style.display = 'block';
+        ideaMgmtRows.innerHTML = Object.entries({
+          'Knowledge nodes':  mgmt.knowledge_count,
+          'Coherence':        `${Math.round((mgmt.alignment||0)*100)}%`,
+          'Registered':       mgmt.registered_at ? mgmt.registered_at.slice(0,10) : '—',
+          'Channel':          mgmt.channel_hint || 'any',
+        }).map(([k,v]) => `
+          <div class="mgmt-row">
+            <span class="mgmt-label">${escHtml(k)}</span>
+            <span class="mgmt-value">${escHtml(String(v))}</span>
+          </div>`).join('');
+      } else {
+        ideaMgmtSection.style.display = 'none';
+      }
+    }
+
+    // Beacon footer
+    if (ideaPanelBeacon) {
+      ideaPanelBeacon.textContent =
+        `CHANNEL  ·  QR → ?beacon=${idea.id}  ·  NFC → ?beacon=${idea.id}  ·  WiFi → captive→?beacon=${idea.id}`;
+    }
+
+    // Open
+    if (ideaPanel) ideaPanel.classList.add('open');
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
   // ── Load guidance from the guide voice ───────────────────────────────────
@@ -418,6 +937,7 @@
     activateReflection,
     activatePurpose,
     emitVrReflection,
+    openIdeaPanel,
     status: () => ({ connected, nodeCount, userId: VR_USER_ID })
   };
 

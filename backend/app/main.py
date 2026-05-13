@@ -39,16 +39,16 @@ from app.api import (
     routes_monitor,
     routes_topic_manual,
     routes_yt,
-    routes_world,
     routes_companion,
     routes_yt_queue,
     routes_wiki_queue,
-    routes_web_mining,
     routes_wisdom_sync,
     routes_mind,
     routes_source_seed,
     routes_mind_ask,
     routes_navigate,
+    routes_matrix_overview,
+    routes_guidance_spawn,
 )
 logger = structlog.get_logger()
 settings = get_settings()
@@ -126,6 +126,31 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Could not start mind pulse worker: %s", e)
 
+    # ── Auto-start the corpus harvester if there is a backlog ──────────────
+    # This ensures that corpus articles already in Redis get processed into
+    # mind:knowledge and fire ENGINE_EXTERNALIZE → VR nodes appear in the world.
+    import asyncio as _asyncio
+    async def _bg_check_harvester():
+        try:
+            import redis.asyncio as _aioredis
+            _r = _aioredis.from_url(
+                __import__("os").environ.get("REDIS_URL", "redis://redis:6379/0"),
+                decode_responses=True
+            )
+            corpus_count   = await _r.hlen("guidance:corpus")
+            harvested_count = await _r.scard("guidance:harvested")
+            await _r.aclose()
+            pending = corpus_count - harvested_count
+            if pending > 0:
+                from app.api.routes_guidance_spawn import _ensure_harvester_running
+                _ensure_harvester_running()
+                logger.info("Corpus harvester auto-started — %d articles pending", pending)
+            else:
+                logger.info("Corpus harvester not needed — no backlog (corpus=%d, harvested=%d)", corpus_count, harvested_count)
+        except Exception as e:
+            logger.warning("Could not auto-start corpus harvester: %s", e)
+    _asyncio.create_task(_bg_check_harvester())
+
     yield
 
 
@@ -154,16 +179,16 @@ app.include_router(routes_guidance.router, tags=["guidance"])
 app.include_router(routes_admin.router,    tags=["admin"])
 app.include_router(routes_topic_manual.router, tags=["manual"])
 app.include_router(routes_yt.router,            tags=["youtube"])
-app.include_router(routes_world.router,         tags=["world"])
 app.include_router(routes_companion.router,     tags=["companion"])
 app.include_router(routes_yt_queue.router,      tags=["yt-queue"])
 app.include_router(routes_wiki_queue.router,    tags=["wiki-queue"])
-app.include_router(routes_web_mining.router,    tags=["web-mining"])
 app.include_router(routes_mind_ask.router,      tags=["mind-ask"])
 app.include_router(routes_wisdom_sync.router,   tags=["wisdom-sync"])
 app.include_router(routes_mind.router,          tags=["mind"])
 app.include_router(routes_source_seed.router,   tags=["source-seed"])
 app.include_router(routes_navigate.router,      tags=["navigate"])
+app.include_router(routes_matrix_overview.router, tags=["matrix"])
+app.include_router(routes_guidance_spawn.router,  tags=["guidance-spawn"])
 
 
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)

@@ -1,4 +1,4 @@
-"""
+﻿"""
 ClosureStrainLayer — closure/leakage/lag + compatibility + strain.
 
 Reads:  ctx.cache.*, ctx.identity.internal_world, ctx.cache.extra["iw_outputs"]
@@ -72,3 +72,4 @@ class ClosureStrainLayer(MindLayer):
         strain = compute_strain(strain_input)
         ctx.cache.strain_score = getattr(strain, "strain_score", 0.0)
         ctx.cache.extra["strain"] = strain
+

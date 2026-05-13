@@ -1,8 +1,12 @@
-"""
-Strain Engine — Measures how much a proposed response may damage
-the user's situation, relationships, identity, safety, or future stability.
+﻿"""strain_engine.py — Measures coherence strain from leakage (L).
 
-High strain → pause, reduce confidence, recommend safer path.
+Y Theory: strain IS leakage. L = the force dispersing the identity's coherence.
+No invented weights for "relationship_risk" or "high_stakes_domain" — the system
+does not know those things. What the system measures is L directly via the
+ClosureLeakageLag computation. That is the strain signal.
+
+Safety override: if harm is actively blocked, strain escalates to CRITICAL
+regardless of L — the moral boundary has been hit.
 """
 
 from __future__ import annotations
@@ -20,55 +24,56 @@ class StrainLevel(str, Enum):
 
 @dataclass
 class StrainInput:
-    emotional_intensity: float = 0.0     # user's current emotional charge (0–1)
-    relationship_risk: float = 0.0       # advice may damage important relationships
-    high_stakes_domain: float = 0.0      # medical/legal/financial/self-harm domain flag
-    irreversible_consequence: float = 0.0  # action cannot be undone
-    user_instability: float = 0.0        # user's current stability state
+    leakage_score: float = 0.0           # L in Y Theory — primary strain signal
+    harm_blocked: bool = False           # moral block -> force CRITICAL
+    # Legacy fields kept for call-site compatibility — not used in score
+    emotional_intensity: float = 0.0
+    relationship_risk: float = 0.0
+    high_stakes_domain: float = 0.0
+    irreversible_consequence: float = 0.0
+    user_instability: float = 0.0
 
 
 @dataclass
 class StrainResult:
     strain_score: float
     strain_level: StrainLevel
-    penalty: float                      # applied as negative in advice_stability_score
+    penalty: float
     warning: str
 
 
 def compute_strain(inp: StrainInput) -> StrainResult:
-    """
-    Compute strain for a proposed advice direction.
+    """Compute strain from L (leakage_score).
 
-    Components are weighted to reflect real-world stakes:
-    - Irreversible consequences and high-stakes domains get highest weight
-    - Emotional intensity modulates but does not dominate
+    Y Theory: L disperses coherence. The force the mind is under IS leakage.
+    Levels reflect how much of the coherence budget is being lost:
+      L < 0.35  -> LOW    (minor dispersion, identity holding)
+      L < 0.60  -> MODERATE (noticeable leakage)
+      L < 0.80  -> HIGH   (significant loss of orientation)
+      L >= 0.80 -> CRITICAL (severe dispersion — shadow dominates)
+
+    If harm_blocked=True, escalate to CRITICAL — a moral boundary has been
+    crossed and the mind must not continue in the current direction.
     """
-    score = min(
-        1.0,
-        (
-            inp.emotional_intensity * 0.15
-            + inp.relationship_risk * 0.20
-            + inp.high_stakes_domain * 0.25
-            + inp.irreversible_consequence * 0.25
-            + inp.user_instability * 0.15
-        ),
-    )
+    if inp.harm_blocked:
+        return StrainResult(
+            strain_score=1.0,
+            strain_level=StrainLevel.CRITICAL,
+            penalty=0.40,
+            warning="CRITICAL: harm block active. Cannot continue in this direction.",
+        )
+
+    score = max(0.0, min(1.0, inp.leakage_score))
 
     if score >= 0.80:
         level = StrainLevel.CRITICAL
-        warning = (
-            "CRITICAL strain: this advice direction carries high risk of irreversible harm. "
-            "Recommend professional support and safe next step only."
-        )
+        warning = "CRITICAL strain: coherence severely dispersed (L >> R)."
     elif score >= 0.60:
         level = StrainLevel.HIGH
-        warning = (
-            "HIGH strain: proceed with strong caution. "
-            "Avoid definitive recommendations. Emphasize professional guidance."
-        )
+        warning = "HIGH strain: significant leakage. Grounding needed."
     elif score >= 0.35:
         level = StrainLevel.MODERATE
-        warning = "MODERATE strain: include caveats and uncertainty acknowledgment."
+        warning = "MODERATE strain: leakage present."
     else:
         level = StrainLevel.LOW
         warning = ""
@@ -76,6 +81,6 @@ def compute_strain(inp: StrainInput) -> StrainResult:
     return StrainResult(
         strain_score=score,
         strain_level=level,
-        penalty=score * 0.40,    # penalty applied to advice_stability_score
+        penalty=score * 0.40,
         warning=warning,
     )

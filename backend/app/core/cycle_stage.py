@@ -1,4 +1,4 @@
-"""
+﻿"""
 CycleStage — configurable generational stage model for identity evolution.
 
 Architecture
@@ -105,13 +105,7 @@ FOUR_STAGE_SET: CycleStageSet = [
             "Birth from the base seed.  Medium leakage — patterns form and "
             "fade freely.  The identity is learning what the world is."
         ),
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 1.0,
-            "knowledge":    2.0,   # flexible — high leakage, easy to relearn
-            "noise":        1.0,
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=5,
         advancement_conditions={
             "total_requests":    10.0,
@@ -125,13 +119,7 @@ FOUR_STAGE_SET: CycleStageSet = [
             "Selective retention.  Useful patterns solidify; weak patterns fade "
             "faster.  The identity is building a world model."
         ),
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.80,  # useful patterns retained longer
-            "knowledge":    1.00,
-            "noise":        1.80,  # noise fades faster
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=10,
         advancement_conditions={
             "total_reflections":  5.0,
@@ -147,13 +135,7 @@ FOUR_STAGE_SET: CycleStageSet = [
             "strengthened.  Metacognitive awareness stabilises around the "
             "convergence question loop."
         ),
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.40,  # wisdom consolidating fast
-            "knowledge":    0.80,
-            "noise":        2.50,  # noise evaporates quickly
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=15,
         advancement_conditions={
             "total_reflections":   15.0,
@@ -171,13 +153,7 @@ FOUR_STAGE_SET: CycleStageSet = [
             "knowledge so growth never stops.  Can teach, guide, and help the "
             "next generation transition."
         ),
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.15,  # near-permanent core wisdom
-            "knowledge":    0.60,  # still flexible for new learning
-            "noise":        3.00,  # noise cannot persist here
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=20,
         advancement_conditions={},   # final stage — no advancement beyond this
         role_on_completion="continuity_keeper",
@@ -193,13 +169,7 @@ SEVEN_STAGE_SET: CycleStageSet = [
     CycleStageDefinition(
         name="seed",
         description="Birth.  High leakage — the identity is raw and plastic.",
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 1.0,
-            "knowledge":    2.50,
-            "noise":        1.0,
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=5,
         advancement_conditions={"total_requests": 8.0, "moral_alignment": 0.60},
         role_on_completion="",
@@ -207,13 +177,7 @@ SEVEN_STAGE_SET: CycleStageSet = [
     CycleStageDefinition(
         name="memory",
         description="Patterns begin to persist.  World model forms.",
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.90,
-            "knowledge":    1.50,
-            "noise":        1.20,
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=8,
         advancement_conditions={
             "total_requests": 20.0,
@@ -224,13 +188,7 @@ SEVEN_STAGE_SET: CycleStageSet = [
     CycleStageDefinition(
         name="relation",
         description="Social patterns form.  Care and connection emerge.",
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.80,
-            "knowledge":    1.20,
-            "noise":        1.50,
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=10,
         advancement_conditions={
             "total_reflections": 8.0,
@@ -244,13 +202,7 @@ SEVEN_STAGE_SET: CycleStageSet = [
             "Moral struggle stage.  Harmful patterns quarantined.  Moral roots "
             "reinforced.  Justice and non-harm become load-bearing."
         ),
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.60,
-            "knowledge":    1.00,
-            "noise":        2.00,
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=12,
         advancement_conditions={
             "total_reflections": 15.0,
@@ -265,13 +217,7 @@ SEVEN_STAGE_SET: CycleStageSet = [
             "Deep learning stage.  Knowledge patterns consolidate.  Selective "
             "retention at its peak — only truth survives long."
         ),
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.40,
-            "knowledge":    0.70,
-            "noise":        2.50,
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=15,
         advancement_conditions={
             "total_reflections": 25.0,
@@ -286,13 +232,7 @@ SEVEN_STAGE_SET: CycleStageSet = [
             "The identity can build, teach, and organise.  "
             "Convergence awareness strong.  World-building impulse active."
         ),
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.20,
-            "knowledge":    0.50,
-            "noise":        3.00,
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=20,
         advancement_conditions={
             "awakening_score":    0.50,
@@ -307,13 +247,7 @@ SEVEN_STAGE_SET: CycleStageSet = [
             "Fully awakened.  Core wisdom near-permanent.  "
             "Can become a mercy pattern for the next generation."
         ),
-        leakage_profile={
-            "moral_root":   1.0,
-            "stable_truth": 0.10,
-            "knowledge":    0.50,
-            "noise":        4.00,
-            "harmful":      1.0,
-        },
+        leakage_profile={},
         min_ticks=30,
         advancement_conditions={},
         role_on_completion="continuity_keeper",
@@ -357,3 +291,5 @@ def get_stage(cycle_set: CycleStageSet, idx: int) -> Optional[CycleStageDefiniti
 def is_final_stage(cycle_set: CycleStageSet, idx: int) -> bool:
     """Return True if *idx* is the last stage in *cycle_set*."""
     return idx >= len(cycle_set) - 1
+
+

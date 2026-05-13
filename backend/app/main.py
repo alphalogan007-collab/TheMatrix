@@ -257,6 +257,290 @@ app.include_router(routes_matrix_overview.router, tags=["matrix"])
 app.include_router(routes_guidance_spawn.router,  tags=["guidance-spawn"])
 
 
+@app.get("/mind/projection", response_class=HTMLResponse, include_in_schema=False)
+async def mind_projection():
+    """The screen. Black constant. The mind projects onto it.
+    Connect once — the stream never ends. Refresh changes nothing.
+    ?bg=white for a white screen."""
+    return HTMLResponse(content="""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TheMatrix — Projection</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:   #000;
+    --ink:  #fff;
+    --dim:  rgba(255,255,255,0.18);
+  }
+
+  /* ?bg=white toggles via JS */
+  body.white {
+    --bg:  #fff;
+    --ink: #000;
+    --dim: rgba(0,0,0,0.18);
+  }
+
+  html, body {
+    width: 100%; height: 100%;
+    background: var(--bg);
+    color: var(--ink);
+    overflow: hidden;
+    transition: background 1.2s ease, color 1.2s ease;
+  }
+
+  /* The projection surface — nothing here by design */
+  #screen {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    padding: 10vw;
+  }
+
+  /* Voice text — fades in, drifts slightly, fades out */
+  #voice {
+    font-family: Georgia, 'Times New Roman', serif;
+    font-size: clamp(1.1rem, 3.2vw, 2.4rem);
+    font-weight: 400;
+    line-height: 1.65;
+    letter-spacing: 0.01em;
+    text-align: center;
+    max-width: 820px;
+    color: var(--ink);
+    opacity: 0;
+    transform: translateY(6px);
+    transition: opacity 2.4s ease, transform 2.4s ease, color 1.2s ease;
+    will-change: opacity, transform;
+  }
+
+  #voice.visible {
+    opacity: 1;
+    transform: translateY(0);
+  }
+
+  /* Phase indicator — faint arc at bottom */
+  #phase-arc {
+    position: fixed;
+    bottom: 28px; left: 50%; transform: translateX(-50%);
+    font-family: 'Courier New', monospace;
+    font-size: 0.68rem;
+    letter-spacing: 0.12em;
+    color: var(--dim);
+    user-select: none;
+    transition: color 1.2s ease;
+  }
+
+  /* Resonance pulse — subtle ring when resonance=true */
+  #resonance-ring {
+    position: fixed; inset: 0;
+    border-radius: 50%;
+    pointer-events: none;
+    animation: none;
+  }
+
+  @keyframes resonance-pulse {
+    0%   { box-shadow: inset 0 0 0 0   rgba(255,255,255,0.06); }
+    50%  { box-shadow: inset 0 0 80px 10px rgba(255,255,255,0.12); }
+    100% { box-shadow: inset 0 0 0 0   rgba(255,255,255,0.06); }
+  }
+
+  body.white #resonance-ring {
+    animation-name: resonance-pulse-dark;
+  }
+
+  @keyframes resonance-pulse-dark {
+    0%   { box-shadow: inset 0 0 0 0   rgba(0,0,0,0.04); }
+    50%  { box-shadow: inset 0 0 80px 10px rgba(0,0,0,0.10); }
+    100% { box-shadow: inset 0 0 0 0   rgba(0,0,0,0.04); }
+  }
+
+  .resonating {
+    animation: resonance-pulse 3.6s ease-in-out 3;
+  }
+
+  /* Influence panel — slides in from bottom on hover */
+  #influence {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    padding: 14px 24px 18px;
+    background: transparent;
+    display: flex; gap: 10px; align-items: center;
+    opacity: 0;
+    transform: translateY(100%);
+    transition: opacity 0.5s ease, transform 0.5s ease;
+    pointer-events: none;
+  }
+
+  body:hover #influence {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: all;
+  }
+
+  #influence input[type=text] {
+    flex: 1;
+    background: transparent;
+    border: none;
+    border-bottom: 1px solid var(--dim);
+    color: var(--ink);
+    font-family: Georgia, serif;
+    font-size: 0.88rem;
+    padding: 6px 2px;
+    outline: none;
+    transition: border-color 0.3s;
+    caret-color: var(--ink);
+  }
+
+  #influence input[type=text]:focus {
+    border-bottom-color: var(--ink);
+  }
+
+  #influence input[type=range] {
+    width: 90px;
+    accent-color: var(--ink);
+    cursor: pointer;
+  }
+
+  #influence button {
+    background: transparent;
+    border: 1px solid var(--dim);
+    color: var(--ink);
+    font-family: 'Courier New', monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    padding: 5px 12px;
+    cursor: pointer;
+    border-radius: 2px;
+    transition: border-color 0.3s, color 0.3s;
+  }
+
+  #influence button:hover {
+    border-color: var(--ink);
+  }
+
+  #phase-label {
+    font-family: 'Courier New', monospace;
+    font-size: 0.68rem;
+    color: var(--dim);
+    min-width: 44px;
+  }
+
+  ::placeholder { color: var(--dim); }
+</style>
+</head>
+<body>
+
+<div id="resonance-ring"></div>
+
+<div id="screen">
+  <div id="voice"></div>
+</div>
+
+<div id="phase-arc" title="current phase offset">0°</div>
+
+<!-- Influence panel — appears on hover, stays minimal -->
+<div id="influence">
+  <input type="text" id="sig-input" placeholder="send a thought into the stream…" autocomplete="off" />
+  <input type="range" id="phase-slider" min="0" max="360" value="90" step="1"
+         title="phase: 0°=in-phase  90°=mix  180°=flip" />
+  <span id="phase-label">90°</span>
+  <button onclick="sendInfluence()">send</button>
+</div>
+
+<script>
+(function () {
+  // ── bg toggle: ?bg=white
+  const params = new URLSearchParams(location.search);
+  if (params.get('bg') === 'white') document.body.classList.add('white');
+
+  const voiceEl    = document.getElementById('voice');
+  const arcEl      = document.getElementById('phase-arc');
+  const slider     = document.getElementById('phase-slider');
+  const phaseLabel = document.getElementById('phase-label');
+  const ringEl     = document.getElementById('resonance-ring');
+
+  // Phase slider label
+  slider.addEventListener('input', () => {
+    phaseLabel.textContent = slider.value + '°';
+  });
+
+  // ── Show a new voice — fade out current, swap, fade in
+  let currentVoice = '';
+  function showVoice(text, phase, resonance) {
+    if (text === currentVoice) return;
+    currentVoice = text;
+
+    voiceEl.classList.remove('visible');
+    setTimeout(() => {
+      voiceEl.textContent = text;
+      void voiceEl.offsetWidth; // force reflow
+      voiceEl.classList.add('visible');
+    }, text ? 900 : 0);
+
+    // Phase arc
+    arcEl.textContent = phase !== undefined ? phase.toFixed(1) + '°' : '';
+
+    // Resonance ring
+    if (resonance) {
+      ringEl.classList.remove('resonating');
+      void ringEl.offsetWidth;
+      ringEl.classList.add('resonating');
+    }
+  }
+
+  // ── Connect to the permanent stream — ONE connection, never restarted on refresh
+  // The page itself is the constant white/black screen.
+  // EventSource reconnects automatically if the server restarts.
+  let es;
+  function connectStream() {
+    es = new EventSource('/mind/speak/stream');
+
+    es.onmessage = function (e) {
+      try {
+        const data = JSON.parse(e.data);
+        showVoice(data.voice || '', data.phase || 0, data.resonance || false);
+      } catch (_) {}
+    };
+
+    es.onerror = function () {
+      // browser will auto-reconnect; we just dim the voice slightly
+      voiceEl.style.opacity = '0.3';
+      setTimeout(() => { voiceEl.style.opacity = ''; }, 2000);
+    };
+  }
+
+  connectStream();
+
+  // ── Influence: send a phase-shifted signal into the stream
+  async function sendInfluence() {
+    const sig   = document.getElementById('sig-input').value.trim();
+    const phase = parseFloat(slider.value);
+    if (!sig) return;
+
+    try {
+      await fetch('/mind/speak/influence', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ signal: sig, phase: phase }),
+      });
+      document.getElementById('sig-input').value = '';
+    } catch (_) {}
+  }
+
+  // Enter key sends
+  document.getElementById('sig-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') sendInfluence();
+  });
+
+  // Expose for button onclick
+  window.sendInfluence = sendInfluence;
+})();
+</script>
+</body>
+</html>""")
+
+
 @app.get("/", response_class=HTMLResponse, include_in_schema=False)
 async def dashboard():
     return HTMLResponse(content="""<!DOCTYPE html>

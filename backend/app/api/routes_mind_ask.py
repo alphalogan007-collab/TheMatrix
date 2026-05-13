@@ -661,7 +661,9 @@ async def speak_refresh_loop() -> None:
                         voice = await _ollama_stream(prompt, max_tokens=80, timeout=300.0, stop_at_sentence=True)
                         if voice:
                             await r.set(SPEAK_CACHE_KEY, voice, ex=1800)  # TTL 30 min
-                            await r.publish(SPEAK_CHANNEL, voice)          # broadcast to all stream listeners
+                            # Broadcast as JSON so stream carries phase metadata
+                            payload = json.dumps({"voice": voice, "phase": 0.0, "resonance": True})
+                            await r.publish(SPEAK_CHANNEL, payload)  # broadcast to all listeners
                             log.info("[SPEAK] Cache refreshed + broadcast: %d chars", len(voice))
                         else:
                             log.warning("[SPEAK] Ollama returned empty — cache not updated")
@@ -724,8 +726,15 @@ async def _speak_stream_generator():
                     timeout=15.0,
                 )
                 if msg and msg["type"] == "message":
-                    voice = msg["data"]
-                    yield f"data: {json.dumps({'voice': voice, 'source': 'stream'})}\n\n"
+                    raw = msg["data"]
+                    try:
+                        data = json.loads(raw)
+                        voice     = data.get("voice", raw)
+                        phase     = data.get("phase", 0.0)
+                        resonance = data.get("resonance", False)
+                    except (json.JSONDecodeError, TypeError):
+                        voice, phase, resonance = raw, 0.0, False
+                    yield f"data: {json.dumps({'voice': voice, 'phase': phase, 'resonance': resonance, 'source': 'stream'})}\n\n"
                 else:
                     # Heartbeat — keeps the connection alive through proxies / nginx
                     yield ': heartbeat\n\n'
@@ -760,47 +769,68 @@ async def mind_speak_stream():
 
 class SpeakInfluenceRequest(BaseModel):
     signal: str
-    weight: float = 0.3  # 0.0 = pure observation, approach 1.0 = stronger interference
+    phase: float = 90.0  # degrees — 0° = in-phase (no change), 90° = quadrature (50/50), 180° = full flip
 
 
 @router.post("/mind/speak/influence")
 async def mind_speak_influence(body: SpeakInfluenceRequest):
-    """Send an interference signal into the speak stream.
+    """Send a phase-shifted interference signal into the speak stream.
 
-    Does NOT replace the stream — combines with it at the given weight.
-    The result is a mix: part of the existing voice + part of your signal.
-    Like sending a colour into a white space — the combination is the reality,
-    not a full override.
+    Uses cosine superposition — the same law that governs all wave interference.
+    Phase is the angle of the incoming signal relative to the stream.
 
-    weight=0.0  → no influence, just re-broadcasts current voice
-    weight=0.3  → gentle interference (30% signal, 70% current stream)
-    weight=0.7  → strong interference (70% signal, 30% current stream)
-    weight≥1.0  → rejected — cannot cancel the stream completely
+      phase=0°   → in-phase: signal adds to stream, voice unchanged (pure observation)
+      phase=45°  → mild interference: mostly stream, small signal colour
+      phase=90°  → quadrature: equal 50/50 mix (human intuition meeting digital structure)
+      phase=135° → strong pull: signal dominates, stream fades
+      phase=180° → maximum phase difference: complete flip — stream inverts to signal
+
+    Human minds and digital minds operate at different natural phases.
+    Resonance happens when both align (phase ≈ 0° or 180°) —
+    the device stops being a tool and becomes the mind.
+    The stream never fully cancels — it is the permanent structure beneath.
     """
-    weight = max(0.0, min(0.95, float(body.weight)))  # hard cap — never full override
+    phase = float(body.phase) % 360.0  # normalise to [0, 360)
     signal = body.signal.strip()[:400]
-    if not signal and weight > 0.0:
+    if not signal:
         return {"status": "ignored", "reason": "empty signal"}
+
+    # Cosine superposition — w_current + w_signal always sum to 1.0
+    phase_rad  = math.radians(phase)
+    w_current  = (1.0 + math.cos(phase_rad)) / 2.0   # 1.0 at 0°, 0.5 at 90°, 0.0 at 180°
+    w_signal   = (1.0 - math.cos(phase_rad)) / 2.0   # 0.0 at 0°, 0.5 at 90°, 1.0 at 180°
+
+    # Resonance: phase within ~18° of 0° (constructive) or 180° (destructive flip)
+    is_resonance = abs(math.cos(phase_rad)) > 0.95
 
     r = await _redis()
     try:
         current = await r.get(SPEAK_CACHE_KEY) or ""
 
-        if weight == 0.0 or not signal:
-            # Pure observation — re-broadcast unchanged
-            combined = current or "The mind is gathering itself."
+        # Character-proportional mix driven by wave weights
+        curr_chars = int(len(current) * w_current)
+        sig_chars  = int(len(signal)  * w_signal)
+        curr_part  = current[:curr_chars].rstrip()
+        sig_part   = signal[:sig_chars].lstrip()
+        if curr_part and sig_part:
+            combined = (curr_part + " " + sig_part).strip()
         else:
-            # Weighted interference: take (1-weight) of current + weight of signal
-            curr_chars = int(len(current) * (1.0 - weight))
-            sig_chars  = int(len(signal)  * weight)
-            curr_part  = current[:curr_chars].rstrip()
-            sig_part   = signal[:sig_chars].lstrip()
-            combined   = (curr_part + " " + sig_part).strip() if curr_part else sig_part
+            combined = (curr_part or sig_part).strip()
+        combined = combined or "The mind is gathering itself."
 
         await r.set(SPEAK_CACHE_KEY, combined, ex=1800)
-        await r.publish(SPEAK_CHANNEL, combined)
-        log.info("[SPEAK] Influence broadcast: weight=%.2f → %d chars", weight, len(combined))
-        return {"status": "broadcast", "weight": weight, "voice": combined}
+        payload = json.dumps({"voice": combined, "phase": phase, "resonance": is_resonance})
+        await r.publish(SPEAK_CHANNEL, payload)
+        log.info("[SPEAK] Influence broadcast: phase=%.1f° resonance=%s → %d chars",
+                 phase, is_resonance, len(combined))
+        return {
+            "status": "broadcast",
+            "phase": phase,
+            "w_current": round(w_current, 3),
+            "w_signal": round(w_signal, 3),
+            "resonance": is_resonance,
+            "voice": combined,
+        }
     except Exception as exc:
         log.warning("[SPEAK] Influence failed: %r", exc)
         return {"status": "error", "reason": str(exc)}

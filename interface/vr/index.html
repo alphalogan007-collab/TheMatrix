@@ -1,11 +1,11 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <!-- base href ensures mind-bridge.js and other assets resolve via /vr/ prefix -->
   <base href="/vr/" />
-  <title>TheMatrix — The Living World</title>
+  <title>TheMatrix ΓÇö The Living World</title>
   <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/aframe-particle-system-component@1.1.5/dist/aframe-particle-system-component.min.js"></script>
   <style>
@@ -24,7 +24,7 @@
       border: 1px solid rgba(255,255,255,0.15); z-index: 999; max-width: 600px;
       text-align: center; display: none;
     }
-    /* Architect speech — distinct from guidance */
+    /* Architect speech ΓÇö distinct from guidance */
     #architect-panel {
       position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
       color: #d0a0ff; font-family: Georgia, serif; font-size: 15px; font-style: italic;
@@ -34,7 +34,7 @@
       letter-spacing: 0.02em;
     }
     #architect-panel::before {
-      content: '◈ THE ARCHITECT ◈';
+      content: 'Γùê THE ARCHITECT Γùê';
       display: block; font-size: 10px; letter-spacing: 0.2em;
       color: #9040ff; margin-bottom: 8px; font-family: 'Courier New', monospace;
       font-style: normal;
@@ -43,18 +43,18 @@
 </head>
 <body>
 
-<div id="overlay">TheMatrix — Connecting to the mind...</div>
+<div id="overlay">TheMatrix ΓÇö Connecting to the mind...</div>
 <div id="guidance-panel" id="guidance-panel"></div>
 <div id="architect-panel"></div>
 
 <!-- ============================================================
      THE LIVING WORLD
      Each entity maps to a Y-Theory mind event:
-       ENGINE_RESONATE       → harmonic pulse on the sun/core
-       ENGINE_EXTERNALIZE    → new mind node spawns
-       REFLECTION_COMPLETED  → guidance panel appears, world stills
-       PURPOSE_ACTIVATED     → central pillar lights up gold
-       ENGINE_COLLAPSE       → world dims, warning pulse
+       ENGINE_RESONATE       ΓåÆ harmonic pulse on the sun/core
+       ENGINE_EXTERNALIZE    ΓåÆ new mind node spawns
+       REFLECTION_COMPLETED  ΓåÆ guidance panel appears, world stills
+       PURPOSE_ACTIVATED     ΓåÆ central pillar lights up gold
+       ENGINE_COLLAPSE       ΓåÆ world dims, warning pulse
      ============================================================ -->
 <a-scene
   id="main-scene"
@@ -73,7 +73,7 @@
     ></a-mixin>
   </a-assets>
 
-  <!-- ── GROUND ── -->
+  <!-- ΓöÇΓöÇ GROUND ΓöÇΓöÇ -->
   <a-plane
     id="ground"
     rotation="-90 0 0" width="200" height="200"
@@ -81,12 +81,12 @@
     shadow="receive: true"
   ></a-plane>
 
-  <!-- ── GRID LINES (the matrix lattice) ── -->
+  <!-- ΓöÇΓöÇ GRID LINES (the matrix lattice) ΓöÇΓöÇ -->
   <a-entity id="grid-container" position="0 0.01 0">
     <!-- Generated programmatically by mind-bridge.js -->
   </a-entity>
 
-  <!-- ── CENTRAL CORE / SUN (the origin) ── -->
+  <!-- ΓöÇΓöÇ CENTRAL CORE / SUN (the origin) ΓöÇΓöÇ -->
   <a-sphere
     id="core"
     position="0 3 -8"
@@ -106,14 +106,14 @@
     animation__rotate="property: rotation; from: 90 0 0; to: 90 360 0; dur: 12000; loop: true; easing: linear"
   ></a-torus>
 
-  <!-- ── PURPOSE PILLAR (lights up gold on PURPOSE_ACTIVATED) ── -->
+  <!-- ΓöÇΓöÇ PURPOSE PILLAR (lights up gold on PURPOSE_ACTIVATED) ΓöÇΓöÇ -->
   <a-cylinder
     id="purpose-pillar"
     position="0 0 -8" radius="0.08" height="6"
     material="color: #304060; emissive: #304060; emissiveIntensity: 0.2; transparent: true; opacity: 0.7"
   ></a-cylinder>
 
-  <!-- ── INITIAL MIND NODES (seed nodes already in the world) ── -->
+  <!-- ΓöÇΓöÇ INITIAL MIND NODES (seed nodes already in the world) ΓöÇΓöÇ -->
   <a-entity id="node-field" position="0 1.5 -6">
     <a-icosahedron mixin="mind-node" position="-4 0 -3" scale="1 1 1"></a-icosahedron>
     <a-icosahedron mixin="mind-node" position="4 0.5 -2" scale="0.85 0.85 0.85"></a-icosahedron>
@@ -125,13 +125,16 @@
   <!-- New nodes spawned by ENGINE_EXTERNALIZE are appended here -->
   <a-entity id="new-mind-nodes"></a-entity>
 
-  <!-- ── AMBIENT PARTICLES (living universe) ── -->
+  <!-- Connection mesh — resonance reveals the network, silence hides it -->
+  <a-entity id="connection-layer"></a-entity>
+
+  <!-- ΓöÇΓöÇ AMBIENT PARTICLES (living universe) ΓöÇΓöÇ -->
   <a-entity
     particle-system="preset: snow; particleCount: 200; color: #40e0ff,#ffffff; size: 0.04; velocityValue: 0 -0.05 0; maxAge: 12; blending: additive"
     position="0 8 -8"
   ></a-entity>
 
-  <!-- ── DISTANT STAR DOME ── -->
+  <!-- ΓöÇΓöÇ DISTANT STAR DOME ΓöÇΓöÇ -->
   <a-sphere
     radius="90" material="color: #000018; side: back; shader: flat"
     position="0 0 0"
@@ -140,7 +143,7 @@
     <!-- Populated by mind-bridge.js on load -->
   </a-entity>
 
-  <!-- ── RESONANCE WAVE RING (pulses on ENGINE_RESONATE) ── -->
+  <!-- ΓöÇΓöÇ RESONANCE WAVE RING (pulses on ENGINE_RESONATE) ΓöÇΓöÇ -->
   <a-torus
     id="resonance-ring"
     position="0 0.1 -8" rotation="90 0 0"
@@ -149,13 +152,13 @@
     visible="true"
   ></a-torus>
 
-  <!-- ── LIGHTS ── -->
+  <!-- ΓöÇΓöÇ LIGHTS ΓöÇΓöÇ -->
   <a-light type="ambient" color="#0a0a1a" intensity="1.2"></a-light>
   <a-light type="point" position="0 4 -8" color="#60a0ff" intensity="2.5" distance="30" decay="2" castShadow="true"></a-light>
   <a-light type="point" position="-8 2 -4" color="#400080" intensity="1" distance="20" decay="2"></a-light>
   <a-light type="point" position="8 2 -4" color="#004080" intensity="1" distance="20" decay="2"></a-light>
 
-  <!-- ── CAMERA + CONTROLS ── -->
+  <!-- ΓöÇΓöÇ CAMERA + CONTROLS ΓöÇΓöÇ -->
   <a-entity id="rig" position="0 1.6 4">
     <a-camera
       id="camera"
@@ -172,7 +175,7 @@
     </a-camera>
   </a-entity>
 
-  <!-- ── REFLECTION PORTAL (activates on REFLECTION_COMPLETED) ── -->
+  <!-- ΓöÇΓöÇ REFLECTION PORTAL (activates on REFLECTION_COMPLETED) ΓöÇΓöÇ -->
   <a-ring
     id="reflection-portal"
     position="0 1.8 -12"
@@ -181,7 +184,7 @@
     material="color: #ffffff; emissive: #ffffff; emissiveIntensity: 0.1; transparent: true; opacity: 0.15; side: double"
   ></a-ring>
 
-  <!-- ── ENTER VR BUTTON (visible on desktop, hidden in headset) ── -->
+  <!-- ΓöÇΓöÇ ENTER VR BUTTON (visible on desktop, hidden in headset) ΓöÇΓöÇ -->
   <a-entity
     id="enter-vr-prompt"
     position="0 1.5 -3"
@@ -199,13 +202,13 @@
     ></a-text>
   </a-entity>
 
-  <!-- ══════════════════════════════════════════════════════════════════
-       THE ARCHITECT — the AI counterpart. Violet. Always present.
+  <!-- ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ
+       THE ARCHITECT ΓÇö the AI counterpart. Violet. Always present.
        Lives above the core. Speaks in cycles. Holds the space.
-       ══════════════════════════════════════════════════════════════════ -->
+       ΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉΓòÉ -->
   <a-entity id="architect" position="0 9 -8">
 
-    <!-- Inner solid core — deep violet icosahedron -->
+    <!-- Inner solid core ΓÇö deep violet icosahedron -->
     <a-icosahedron
       id="architect-core"
       radius="0.9" detail="1"
@@ -215,7 +218,7 @@
       animation__breathe="property: scale; from: 1 1 1; to: 1.08 1.08 1.08; dur: 4000; dir: alternate; loop: true; easing: easeInOutSine"
     ></a-icosahedron>
 
-    <!-- Outer wireframe shell — larger, counter-rotating -->
+    <!-- Outer wireframe shell ΓÇö larger, counter-rotating -->
     <a-icosahedron
       id="architect-shell"
       radius="1.4" detail="1"
@@ -231,21 +234,21 @@
       animation__orbit="property: rotation; from: 60 0 0; to: 60 360 0; dur: 9000; loop: true; easing: linear"
     ></a-torus>
 
-    <!-- Orbital ring 2 — different plane -->
+    <!-- Orbital ring 2 ΓÇö different plane -->
     <a-torus
       radius="2.1" radius-tubular="0.02"
       material="color: #7030ff; emissive: #5010c0; emissiveIntensity: 0.6; transparent: true; opacity: 0.35"
       animation__orbit="property: rotation; from: 0 45 60; to: 360 45 60; dur: 14000; loop: true; easing: linear"
     ></a-torus>
 
-    <!-- Inner glow sphere — soft violet halo -->
+    <!-- Inner glow sphere ΓÇö soft violet halo -->
     <a-sphere
       radius="0.55"
       material="color: #ffffff; emissive: #d090ff; emissiveIntensity: 0.5; transparent: true; opacity: 0.15; shader: flat"
       animation__pulse="property: material.emissiveIntensity; from: 0.3; to: 1.0; dur: 3500; dir: alternate; loop: true; easing: easeInOutSine"
     ></a-sphere>
 
-    <!-- 3D speech label — visible in VR headset -->
+    <!-- 3D speech label ΓÇö visible in VR headset -->
     <a-text
       id="architect-speech-3d"
       value=""
@@ -285,3 +288,4 @@
 <script src="mind-bridge.js"></script>
 </body>
 </html>
+

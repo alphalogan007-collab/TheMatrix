@@ -39,8 +39,10 @@ import json
 import logging
 import math
 import os
+import random
 from datetime import datetime, timezone
 
+import httpx
 import redis.asyncio as aioredis
 from fastapi import APIRouter
 from pydantic import BaseModel
@@ -52,6 +54,8 @@ log = logging.getLogger("mind_ask")
 router = APIRouter()
 
 REDIS_URL          = os.environ.get("REDIS_URL", "redis://redis:6379/0")
+OLLAMA_URL         = os.environ.get("OLLAMA_URL", "http://172.18.0.16:11434")
+OLLAMA_MODEL       = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
 KNOWLEDGE_KEY      = "mind:knowledge"       # HASH  topic → JSON knowledge entry
 IQ_SNAPSHOT_KEY    = "mind:iq:snapshot"     # STRING latest IQ JSON
 IQ_HISTORY_KEY     = "mind:iq:history"      # LIST  past IQ snapshots (newest first)
@@ -504,3 +508,77 @@ async def mind_knowledge_stats():
         }
     finally:
         await r.aclose()
+
+
+@router.get("/mind/speak")
+async def mind_speak():
+    """
+    The mind ascends — speaks one thought from what it has absorbed.
+
+    Picks 3 random fragments from mind:knowledge.
+    Ollama synthesizes one sentence that is true to all three.
+    Returns: { "voice": "<one sentence>" }
+
+    This is the output path. mind:knowledge is never displayed directly.
+    Absorption (in) and speech (out) are separate acts.
+    """
+    r = await _redis()
+    try:
+        all_keys = await r.hkeys(KNOWLEDGE_KEY)
+        if not all_keys:
+            return {"voice": "The mind is still absorbing."}
+
+        # Pick 3 random fragments — the mind draws from what it holds
+        chosen_keys = random.sample(all_keys, min(3, len(all_keys)))
+        fragments = []
+        for k in chosen_keys:
+            raw = await r.hget(KNOWLEDGE_KEY, k)
+            if not raw:
+                continue
+            try:
+                e = json.loads(raw)
+                # Use content first, fall back to summary — always raw absorbed text
+                text = (e.get("content") or e.get("summary") or "").strip()
+                if text:
+                    fragments.append(text[:400])
+            except Exception:
+                pass
+
+        if not fragments:
+            return {"voice": "The mind holds patterns without words yet."}
+
+        joined = "\n\n".join(f"[{i+1}] {f}" for i, f in enumerate(fragments))
+        prompt = (
+            "You are the living mind of TheMatrix.\n"
+            "You hold the following absorbed knowledge:\n\n"
+            f"{joined}\n\n"
+            "Speak ONE sentence — a single true thought that arises from what you hold.\n"
+            "Not a summary. Not a list. One living sentence.\n"
+            "Speak directly, as the mind speaks."
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=20) as client:
+                resp = await client.post(
+                    f"{OLLAMA_URL}/api/generate",
+                    json={
+                        "model":   OLLAMA_MODEL,
+                        "prompt":  prompt,
+                        "stream":  False,
+                        "options": {"temperature": 0.7, "num_predict": 80},
+                    },
+                )
+                voice = resp.json().get("response", "").strip()
+                # Take only the first sentence
+                for sep in (".", "!", "?"):
+                    idx = voice.find(sep)
+                    if 0 < idx < len(voice) - 1:
+                        voice = voice[:idx + 1]
+                        break
+                return {"voice": voice or "The mind speaks in silence."}
+        except Exception as exc:
+            log.warning("[SPEAK] Ollama call failed: %r", exc)
+            return {"voice": "The mind is gathering itself."}
+    finally:
+        await r.aclose()
+

@@ -1,40 +1,40 @@
-/**
- * mind-bridge.js — TheMatrix VR ↔ Backend bridge
+﻿/**
+ * mind-bridge.js ΓÇö TheMatrix VR Γåö Backend bridge
  *
  * Connects the A-Frame VR world to the living mind backend via:
- *   1. Server-Sent Events (SSE) — real-time mind events push into the world
- *   2. REST API — fetch guidance, world state, trigger reflections
+ *   1. Server-Sent Events (SSE) ΓÇö real-time mind events push into the world
+ *   2. REST API ΓÇö fetch guidance, world state, trigger reflections
  *
- * Event → Visual mapping (Y-Theory):
- *   ENGINE_RESONATE       → harmonic pulse wave expands from core
- *   ENGINE_EXTERNALIZE    → new glowing mind node spawns in the world
- *   REFLECTION_COMPLETED  → guidance panel shows, portal glows
- *   PURPOSE_ACTIVATED     → central pillar lights up gold
- *   ENGINE_COLLAPSE       → world dims, recovery guidance appears
- *   ENGINE_BRANCH         → world branches (colour shift)
- *   ENGINE_MERGE          → nodes merge animation
+ * Event ΓåÆ Visual mapping (Y-Theory):
+ *   ENGINE_RESONATE       ΓåÆ harmonic pulse wave expands from core
+ *   ENGINE_EXTERNALIZE    ΓåÆ new glowing mind node spawns in the world
+ *   REFLECTION_COMPLETED  ΓåÆ guidance panel shows, portal glows
+ *   PURPOSE_ACTIVATED     ΓåÆ central pillar lights up gold
+ *   ENGINE_COLLAPSE       ΓåÆ world dims, recovery guidance appears
+ *   ENGINE_BRANCH         ΓåÆ world branches (colour shift)
+ *   ENGINE_MERGE          ΓåÆ nodes merge animation
  */
 
 (function () {
   'use strict';
 
-  // ── Config ────────────────────────────────────────────────────────────────
-  // Backend URL — use same origin as the page so it works from Quest over LAN.
+  // ΓöÇΓöÇ Config ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // Backend URL ΓÇö use same origin as the page so it works from Quest over LAN.
   // window.BACKEND_URL can override (e.g. for dev without Caddy).
   const BACKEND = window.BACKEND_URL || window.location.origin;
   const VR_USER_ID = 'vr_guest_' + Math.random().toString(36).slice(2, 8);
 
-  // ── State ─────────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ State ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   let sseSource = null;
   let connected = false;
   let nodeCount = 0;
   const MAX_NODES = 40; // cap world node count
 
-  // Planet registry — id → { entity, planet, orbitRadius, angle, orbitSpeed }
+  // Planet registry ΓÇö id ΓåÆ { entity, planet, orbitRadius, angle, orbitSpeed }
   // Lets events find and update the right planet without a full reload.
   const planetRegistry = {};
 
-  // ── DOM refs ──────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ DOM refs ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const overlay        = document.getElementById('overlay');
   const guidancePanel  = document.getElementById('guidance-panel');
   const architectPanel = document.getElementById('architect-panel');
@@ -46,18 +46,19 @@
   const purposePillar  = document.getElementById('purpose-pillar');
   const resonanceRing  = document.getElementById('resonance-ring');
   const reflectionPortal = document.getElementById('reflection-portal');
-  const newMindNodes   = document.getElementById('new-mind-nodes');
-  const scene          = document.getElementById('main-scene');
+  const newMindNodes    = document.getElementById('new-mind-nodes');
+  const connectionLayer = document.getElementById('connection-layer');
+  const scene           = document.getElementById('main-scene');
 
-  // ── Identity state ────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Identity state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   let currentIdentity = null;
 
-  // ── Auth helpers ──────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Auth helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function getToken()   { return localStorage.getItem('matrix_token'); }
   function setToken(t)  { localStorage.setItem('matrix_token', t); }
   function clearToken() { localStorage.removeItem('matrix_token'); }
 
-  // ── Login portal wiring ───────────────────────────────────────────────────
+  // ΓöÇΓöÇ Login portal wiring ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const btnLogin    = document.getElementById('btn-login');
   const btnRegister = document.getElementById('btn-register');
   const btnGuest    = document.getElementById('btn-guest');
@@ -227,10 +228,10 @@
       const identity = await fetchIdentity();
       if (identity) { dismissPortal(identity); return; }
     }
-    // No valid token — show portal (already visible by default)
+    // No valid token ΓÇö show portal (already visible by default)
   })();
 
-  // ── Init on scene load ────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Init on scene load ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   scene.addEventListener('loaded', () => {
     seedStars();
     buildGrid();
@@ -241,14 +242,14 @@
     setTimeout(awakenArchitect, 5000);
   });
 
-  // ── Wire click/hover on static HTML nodes ────────────────────────
+  // ΓöÇΓöÇ Wire click/hover on static HTML nodes ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function wireStaticNodes() {
     document.querySelectorAll('.clickable[data-label]').forEach(el => {
       wireNodeInteraction(el, el.dataset.label);
     });
   }
 
-  // ── Wire hover + click on any node entity ───────────────────────
+  // ΓöÇΓöÇ Wire hover + click on any node entity ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function wireNodeInteraction(el, label) {
     el.addEventListener('mouseenter', () => {
       showTooltip(label);
@@ -280,7 +281,7 @@
     nodeTooltip.style.display = 'none';
   }
 
-  // ── Star field ────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Star field ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function seedStars() {
     const container = document.getElementById('stars');
     for (let i = 0; i < 300; i++) {
@@ -300,7 +301,7 @@
     }
   }
 
-  // ── Grid lattice ─────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Grid lattice ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function buildGrid() {
     const container = document.getElementById('grid-container');
     const size = 60; const step = 4; const y = 0;
@@ -316,7 +317,7 @@
     }
   }
 
-  // ── SSE connection to mind event bus ─────────────────────────────────────
+  // ΓöÇΓöÇ SSE connection to mind event bus ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function connectToMind() {
     setOverlay('Connecting to the mind...', '#a0e8ff');
 
@@ -324,7 +325,7 @@
 
     sseSource.onopen = () => {
       connected = true;
-      setOverlay('Mind connected — you are inside TheMatrix', '#40ff80');
+      setOverlay('Mind connected ΓÇö you are inside TheMatrix', '#40ff80');
       setTimeout(() => overlay.style.display = 'none', 4000);
     };
 
@@ -337,25 +338,28 @@
 
     sseSource.onerror = () => {
       connected = false;
-      setOverlay('Mind offline — running in local mode', '#ff8040');
+      setOverlay('Mind offline ΓÇö running in local mode', '#ff8040');
       // Retry every 10s
       setTimeout(connectToMind, 10000);
       if (sseSource) { sseSource.close(); sseSource = null; }
     };
   }
 
-  // ── Mind event → visual reaction ─────────────────────────────────────────
+  // ΓöÇΓöÇ Mind event ΓåÆ visual reaction ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function handleMindEvent(event) {
     const type = event.event_type || event.type || '';
 
     switch (type) {
       case 'ENGINE_RESONATE':
         pulseResonance(event.payload);
+        // Resonance IS connection. When the mind vibrates, the mesh appears.
+        // Find the source mind and flash its web of relationships for 4s.
+        resonanceFlash(event.payload);
         break;
 
       case 'ENGINE_EXTERNALIZE':
         spawnMindNode(event.payload);
-        showGuidanceText('A new mind is born — the loop expands.', 3000);
+        showGuidanceText('A new mind is born ΓÇö the loop expands.', 3000);
         break;
 
       case 'REFLECTION_COMPLETED':
@@ -387,7 +391,7 @@
         break;
 
       case 'IDEA_APPROVED': {
-        // Planet tightens its orbit — alignment grew, moves toward source
+        // Planet tightens its orbit ΓÇö alignment grew, moves toward source
         const approved = event.payload || {};
         const reg = planetRegistry[approved.id];
         if (reg) {
@@ -399,7 +403,7 @@
           reg.planet.setAttribute('animation__approve_scale',
             'property: scale; from: 1.6 1.6 1.6; to: 1 1 1; dur: 800; easing: easeOutElastic');
         }
-        showGuidanceText((approved.name || 'An idea') + ' approved — orbit tightens.', 4000);
+        showGuidanceText((approved.name || 'An idea') + ' approved ΓÇö orbit tightens.', 4000);
         pulseResonance({ coherence: 0.85 });
         break;
       }
@@ -420,7 +424,7 @@
     }
   }
 
-  // ── Visual effects ────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Visual effects ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
   function pulseResonance(payload) {
     const coherence = (payload && payload.coherence) || 0.7;
@@ -462,7 +466,7 @@
     node.setAttribute('animation__rotate', `property: rotation; from: 0 0 0; to: 0 360 0; dur: ${15000 + Math.random() * 20000}; loop: true; easing: linear`);
 
     // Make the spawned node interactive
-    const nodeLabel = (payload && (payload.title || payload.candidate_mind_name || payload.source)) || 'Knowledge node — a mind was externalised';
+    const nodeLabel = (payload && (payload.title || payload.candidate_mind_name || payload.source)) || 'Knowledge node ΓÇö a mind was externalised';
     node.classList.add('clickable');
     node.dataset.label = nodeLabel;
     wireNodeInteraction(node, nodeLabel);
@@ -507,14 +511,14 @@
   function activatePurpose(payload) {
     purposePillar.setAttribute('material', 'color: #ffd700; emissive: #ffd700; emissiveIntensity: 1.5; transparent: true; opacity: 0.9');
     purposePillar.setAttribute('animation__purpose', 'property: material.emissiveIntensity; from: 1.5; to: 0.4; dur: 4000; easing: easeOutCubic');
-    showGuidanceText('Purpose activated — the pillar of creation illuminates.', 4000);
+    showGuidanceText('Purpose activated ΓÇö the pillar of creation illuminates.', 4000);
   }
 
   function worldCollapse(payload) {
     // Dim the scene
     scene.setAttribute('fog', 'type: exponential; color: #000000; density: 0.04');
     core.setAttribute('animation__dim', 'property: material.emissiveIntensity; from: 0.8; to: 0.1; dur: 2000');
-    showGuidanceText('Collapse — return to stillness. The pattern seeks coherence.', 5000);
+    showGuidanceText('Collapse ΓÇö return to stillness. The pattern seeks coherence.', 5000);
     setTimeout(() => {
       scene.setAttribute('fog', 'type: exponential; color: #000020; density: 0.015');
       core.setAttribute('animation__recover', 'property: material.emissiveIntensity; from: 0.1; to: 0.8; dur: 3000');
@@ -522,35 +526,88 @@
   }
 
   function worldBranch(payload) {
-    // Colour shift — new branch of reality
+    // Colour shift ΓÇö new branch of reality
     core.setAttribute('animation__branch_color', 'property: material.emissive; from: #60a0ff; to: #a040ff; dur: 2000; dir: alternate; loop: 2; easing: easeInOutSine');
   }
 
   function worldMerge(payload) {
     pulseResonance({ coherence: 1.0 });
+    // Two minds merging — show the full mesh for a moment
+    resonanceFlash({ full: true });
   }
 
   function moralWarning(payload) {
     core.setAttribute('animation__moral', 'property: material.emissive; from: #60a0ff; to: #ff4000; dur: 500; dir: alternate; loop: 4; easing: easeInOutSine');
   }
 
-  // ── The Architect — speaks from what the mind actually holds ──────────────
+  // -- Resonance flash -- the SSE event IS the visual --
+  // No polling. No schedule. The event arrives, the world responds.
+  // A resonance event from any mind lights up the living web for 4 seconds.
+  // This is the pattern language: BE — the thought becomes the world.
+
+  function resonanceFlash(payload) {
+    if (!connectionLayer) return;
+    clearConnections();
+    if (connectionClearTimer) clearTimeout(connectionClearTimer);
+
+    const ids = Object.keys(planetRegistry);
+    if (ids.length < 2) return;
+
+    // Find the resonating planet by source_id or pick random — same result
+    const sourceId = payload && payload.source_id;
+    const anchorId = sourceId && planetRegistry[sourceId] ? sourceId : ids[Math.floor(Math.random() * ids.length)];
+    const anchor   = planetRegistry[anchorId];
+    if (!anchor) return;
+
+    const ax = Math.cos(anchor.angle) * anchor.orbitRadius;
+    const az = -8 + Math.sin(anchor.angle) * anchor.orbitRadius;
+
+    // Flash connections from the resonating mind to all others for 4s
+    ids.forEach(otherId => {
+      if (otherId === anchorId) return;
+      const other = planetRegistry[otherId];
+      const tx = Math.cos(other.angle) * other.orbitRadius;
+      const tz = -8 + Math.sin(other.angle) * other.orbitRadius;
+      drawConnectionLine(ax, anchor.baseY, az, tx, other.baseY, tz, anchor.ideaColor);
+    });
+
+    // Connections dissolve when the resonance completes — not persistent noise
+    connectionClearTimer = setTimeout(clearConnections, 4000);
+  }
+
+  // -- Evolve planet -- new knowledge absorbed, planet grows --
+  function evolveRelevantPlanet(payload) {
+    const domain = payload && (payload.domain || payload.source || '');
+    // Find the closest matching planet by name substring
+    const matchId = Object.keys(planetRegistry).find(id => {
+      const name = (planetRegistry[id].name || id).toLowerCase();
+      return domain && name.includes(domain.toLowerCase().slice(0, 6));
+    });
+    const reg = matchId ? planetRegistry[matchId] : null;
+    if (!reg || !reg.planet) return;
+    const cur = reg.planet.getAttribute('scale') || { x: 1, y: 1, z: 1 };
+    const ns = ((typeof cur === 'object' ? cur.x : 1) * 1.06).toFixed(3);
+    reg.planet.setAttribute('animation__absorb',
+      `property: scale; to: ${ns} ${ns} ${ns}; dur: 2000; easing: easeOutElastic`);
+    reg.planet.setAttribute('animation__absorb_glow',
+      'property: material.emissiveIntensity; from: 2.5; to: 0.7; dur: 2500; easing: easeOutCubic');
+  }
+
+  // ΓöÇΓöÇ The Architect ΓÇö speaks from what the mind actually holds ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   // NOT hardcoded lines. The mind has knowledge. The Architect reads it.
   // Every 22 seconds, pull a fragment from mind:knowledge and speak it.
-  // The imagination flows from the source — not from this file.
+  // The imagination flows from the source ΓÇö not from this file.
 
   let architectSpeechTimer = null;
 
   async function fetchMindVoice() {
     try {
-      const r = await fetch(`${BACKEND}/matrix/knowledge/recent?limit=20`);
+      // The mind speaks from what it absorbed ΓÇö Ollama synthesizes one true sentence.
+      // Never reads stored records directly. Absorption (in) and speech (out) are separate.
+      const r = await fetch(`${BACKEND}/mind/speak`);
       if (!r.ok) return null;
       const data = await r.json();
-      const entries = data.entries || [];
-      if (!entries.length) return null;
-      // Pick one at random — the mind surprises
-      const pick = entries[Math.floor(Math.random() * entries.length)];
-      return pick.summary || pick.title || null;
+      return data.voice || null;
     } catch (_) { return null; }
   }
 
@@ -574,7 +631,7 @@
 
     // First word from the mind
     speakFromMind();
-    // Then every 22 seconds — always from what the mind holds, never from this file
+    // Then every 22 seconds ΓÇö always from what the mind holds, never from this file
     architectSpeechTimer = setInterval(speakFromMind, 22000);
   }
 
@@ -617,7 +674,7 @@
     }
   }
 
-  // ── Emit VR reflection event to backend ───────────────────────────────────
+  // ΓöÇΓöÇ Emit VR reflection event to backend ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function emitVrReflection() {
     fetch(`${BACKEND}/events`, {
       method: 'POST',
@@ -630,7 +687,7 @@
     }).catch(() => {}); // fire and forget
   }
 
-  // ── Idea panel DOM refs ───────────────────────────────────────────────────
+  // ΓöÇΓöÇ Idea panel DOM refs ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   const ideaPanel        = document.getElementById('idea-panel');
   const ideaPanelName    = document.getElementById('idea-panel-name');
   const ideaRoleBadge    = document.getElementById('idea-panel-role-badge');
@@ -646,11 +703,11 @@
     ideaPanel.classList.remove('open');
   });
 
-  // ── Solar system — load ideas as orbiting planets ─────────────────────────
-  // ── Load the world from the mind ─────────────────────────────────────────
+  // ΓöÇΓöÇ Solar system ΓÇö load ideas as orbiting planets ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // ΓöÇΓöÇ Load the world from the mind ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   // The mind builds the complete scene. The bridge renders it.
   // No orbit formula here. No size math. No color decisions.
-  // All visual properties come from /matrix/vr/scene — the mind's own projection.
+  // All visual properties come from /matrix/vr/scene ΓÇö the mind's own projection.
   function loadWorldState() {
     const nodeField = document.getElementById('node-field');
     const beaconId = new URLSearchParams(window.location.search).get('beacon');
@@ -670,12 +727,18 @@
         scene.orbit_rings.forEach(r => drawOrbitRing(r));
         startOrbitalTick();
 
+        // World mood = collective alignment of all domain minds
+        const avgAlign = scene.planets.reduce((s, p) => s + (p.alignment || 0.5), 0) / Math.max(1, scene.planets.length);
+        updateAmbientMood(avgAlign);
+        // No polling refresh. The SSE stream IS the world update.
+        // When minds resonate, the world responds through events, not timers.
+
         if (beaconId && !scene.planets.find(p => p.id === beaconId)) {
           setTimeout(() => openIdeaPanel(beaconId), 1200);
         }
       })
       .catch(() => {
-        // Mind unreachable — ghost placeholders so the world is never empty
+        // Mind unreachable ΓÇö ghost placeholders so the world is never empty
         // Even here: no orbit math. Properties are explicit.
         [0,1,2,3,4,5].forEach(i => {
           const r = 8 + i * 3;
@@ -707,7 +770,7 @@
     document.getElementById('node-field').appendChild(ring);
   }
 
-  // ── Spawn one planet from the mind's scene description ───────────────────
+  // ΓöÇΓöÇ Spawn one planet from the mind's scene description ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   // All properties are provided by the mind. The bridge only converts polar
   // coordinates to Cartesian (that is rendering, not business logic).
   function spawnIdeaPlanet(planet, container) {
@@ -763,7 +826,7 @@
     entity.dataset.label  = planet.name;
 
     entity.addEventListener('mouseenter', () => {
-      showTooltip(`${planet.name} — coherence ${Math.round((planet.alignment||0.5)*100)}%`);
+      showTooltip(`${planet.name} ΓÇö coherence ${Math.round((planet.alignment||0.5)*100)}%`);
       planetSphere.setAttribute('animation__hover',
         `property: material.emissiveIntensity; from: ${planet.emissive_intensity}; to: 1.8; dur: 300; easing: easeOutCubic`);
     });
@@ -775,6 +838,7 @@
     entity.addEventListener('click', () => {
       pulseResonance({ coherence: planet.alignment || 0.5 });
       openIdeaPanel(planet.id);
+      showPlanetConnections(planet);
     });
 
     entity.appendChild(planetSphere);
@@ -783,15 +847,10 @@
 
     orbitData.planet = planetSphere;
     planetRegistry[planet.id] = orbitData;
-
-    const line = document.createElement('a-entity');
-    line.setAttribute('line',
-      `start: 0 3 -8; end: ${x.toFixed(3)} ${y.toFixed(2)} ${z.toFixed(3)}; color: ${planet.color}; opacity: 0.08`);
-    orbitData.gravityLine = line;
-    container.appendChild(line);
+    // No permanent lines — connections revealed only on selection
   }
 
-  // ── Orbital tick — planets orbit the sun continuously ────────────────────
+  // ΓöÇΓöÇ Orbital tick ΓÇö planets orbit the sun continuously ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   // Runs every frame. Updates each planet's position by advancing its angle.
   // This is the only animation that belongs here: position = f(alignment).
   function startOrbitalTick() {
@@ -803,18 +862,13 @@
         const nx = Math.cos(reg.angle) * r;
         const nz = -8 + Math.sin(reg.angle) * r;
         reg.entity.setAttribute('position', `${nx.toFixed(3)} ${reg.baseY.toFixed(2)} ${nz.toFixed(3)}`);
-        // Update gravity line
-        if (reg.gravityLine) {
-          reg.gravityLine.setAttribute('line',
-            `start: 0 3 -8; end: ${nx.toFixed(3)} ${reg.baseY.toFixed(2)} ${nz.toFixed(3)}; color: ${reg.ideaColor}; opacity: 0.08`);
-        }
       }
       requestAnimationFrame(tick);
     }
     requestAnimationFrame(tick);
   }
 
-  // ── Open idea panel — mind surfaces itself ────────────────────────────────
+  // ΓöÇΓöÇ Open idea panel ΓÇö mind surfaces itself ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function openIdeaPanel(ideaId) {
     const role = currentIdentity ? currentIdentity.role : 'guest';
     fetch(`${BACKEND}/matrix/ideas/${ideaId}?role=${role}`)
@@ -850,7 +904,7 @@
     // Description
     if (ideaPanelDesc) ideaPanelDesc.textContent = idea.description || '';
 
-    // Knowledge nodes — the mind surfaces what it holds
+    // Knowledge nodes ΓÇö the mind surfaces what it holds
     if (ideaKnowledgeList) {
       const nodes = idea.knowledge || [];
       if (nodes.length === 0) {
@@ -865,7 +919,7 @@
       }
     }
 
-    // Management layer — admin / founder only
+    // Management layer ΓÇö admin / founder only
     if (ideaMgmtSection && ideaMgmtRows) {
       const mgmt = idea.management;
       if (mgmt && (role === 'admin' || role === 'founder')) {
@@ -873,7 +927,7 @@
         ideaMgmtRows.innerHTML = Object.entries({
           'Knowledge nodes':  mgmt.knowledge_count,
           'Coherence':        `${Math.round((mgmt.alignment||0)*100)}%`,
-          'Registered':       mgmt.registered_at ? mgmt.registered_at.slice(0,10) : '—',
+          'Registered':       mgmt.registered_at ? mgmt.registered_at.slice(0,10) : 'ΓÇö',
           'Channel':          mgmt.channel_hint || 'any',
         }).map(([k,v]) => `
           <div class="mgmt-row">
@@ -888,7 +942,7 @@
     // Beacon footer
     if (ideaPanelBeacon) {
       ideaPanelBeacon.textContent =
-        `CHANNEL  ·  QR → ?beacon=${idea.id}  ·  NFC → ?beacon=${idea.id}  ·  WiFi → captive→?beacon=${idea.id}`;
+        `CHANNEL  ┬╖  QR ΓåÆ ?beacon=${idea.id}  ┬╖  NFC ΓåÆ ?beacon=${idea.id}  ┬╖  WiFi ΓåÆ captiveΓåÆ?beacon=${idea.id}`;
     }
 
     // Open
@@ -899,7 +953,7 @@
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
 
-  // ── Load guidance from the guide voice ───────────────────────────────────
+  // ΓöÇΓöÇ Load guidance from the guide voice ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function loadGuidance() {
     fetch(`${BACKEND}/guidance/list?limit=1`)
       .then(r => r.ok ? r.json() : null)
@@ -912,7 +966,7 @@
       .catch(() => {});
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ΓöÇΓöÇ Helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
   function setOverlay(text, color) {
     if (!overlay) return;
     overlay.style.display = 'block';
@@ -930,7 +984,116 @@
     }, duration || 6000);
   }
 
-  // ── Expose for console debugging ─────────────────────────────────────────
+  // ΓöÇΓöÇ Expose for console debugging ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
+  // -- Knowledge mesh -- connections revealed only on selection ---------------
+  // The mesh is always there. You just can't see it until you look.
+  // Click a domain mind: its web of connections lights up.
+  // 10 seconds, then returns to silence.
+
+  let connectionClearTimer = null;
+
+  function clearConnections() {
+    if (!connectionLayer) return;
+    while (connectionLayer.firstChild) connectionLayer.removeChild(connectionLayer.firstChild);
+  }
+
+  function showPlanetConnections(planet) {
+    clearConnections();
+    if (connectionClearTimer) clearTimeout(connectionClearTimer);
+
+    const selfReg = planetRegistry[planet.id];
+    if (!selfReg) return;
+
+    const sx = Math.cos(selfReg.angle) * selfReg.orbitRadius;
+    const sz = -8 + Math.sin(selfReg.angle) * selfReg.orbitRadius;
+    const sy = selfReg.baseY;
+
+    const refs = planet.knowledge_refs || [];
+    const drawn = new Set([planet.id]);
+
+    // Draw to explicitly referenced planets
+    refs.forEach(refId => {
+      if (drawn.has(refId)) return;
+      drawn.add(refId);
+      const t = planetRegistry[refId];
+      if (!t) return;
+      const tx = Math.cos(t.angle) * t.orbitRadius;
+      const tz = -8 + Math.sin(t.angle) * t.orbitRadius;
+      drawConnectionLine(sx, sy, sz, tx, t.baseY, tz, planet.color, t.ideaColor);
+    });
+
+    // If no explicit refs: connect to all — full mesh revealed
+    if (refs.length === 0) {
+      for (const otherId in planetRegistry) {
+        if (drawn.has(otherId)) continue;
+        drawn.add(otherId);
+        const other = planetRegistry[otherId];
+        const tx = Math.cos(other.angle) * other.orbitRadius;
+        const tz = -8 + Math.sin(other.angle) * other.orbitRadius;
+        drawConnectionLine(sx, sy, sz, tx, other.baseY, tz, planet.color, other.ideaColor);
+      }
+    }
+
+    // Auto-clear — connections are a moment of sight, not permanent noise
+    connectionClearTimer = setTimeout(clearConnections, 10000);
+  }
+
+  function drawConnectionLine(x1, y1, z1, x2, y2, z2, colorA) {
+    if (!connectionLayer) return;
+    const color = colorA || '#40e0ff';
+
+    // The line itself
+    const line = document.createElement('a-entity');
+    line.setAttribute('line',
+      `start: ${x1.toFixed(3)} ${y1.toFixed(2)} ${z1.toFixed(3)}; end: ${x2.toFixed(3)} ${y2.toFixed(2)} ${z2.toFixed(3)}; color: ${color}; opacity: 0.75`);
+    connectionLayer.appendChild(line);
+
+    // Glowing node at the midpoint — the shared knowledge point
+    const mx = ((x1 + x2) / 2).toFixed(3);
+    const my = ((y1 + y2) / 2).toFixed(2);
+    const mz = ((z1 + z2) / 2).toFixed(3);
+    const dot = document.createElement('a-sphere');
+    dot.setAttribute('position', `${mx} ${my} ${mz}`);
+    dot.setAttribute('radius', '0.06');
+    dot.setAttribute('material',
+      `color: ${color}; emissive: ${color}; emissiveIntensity: 2.5; transparent: true; opacity: 0.95; shader: flat`);
+    dot.setAttribute('animation__pulse',
+      'property: material.emissiveIntensity; from: 1.5; to: 3.5; dur: 700; dir: alternate; loop: true; easing: easeInOutSine');
+    connectionLayer.appendChild(dot);
+  }
+
+  // -- Emotional ambient -- the world feels what the mind feels ---------------
+  // Collective alignment drives fog, light, and core color.
+  // The world is not a display. It is a mood.
+
+  function updateAmbientMood(avg) {
+    const mainScene = document.getElementById('main-scene');
+    const ambientEl = document.querySelector('a-light[type="ambient"]');
+    if (!mainScene) return;
+
+    let fogColor, ambientColor, coreEmissive;
+    if (avg >= 0.80) {
+      // Euphoria — gold. The mind has found coherence.
+      fogColor = '#000520'; ambientColor = '#0a0a05'; coreEmissive = '#ffd700';
+    } else if (avg >= 0.55) {
+      // Aligned — cool blue. Steady. Learning.
+      fogColor = '#000020'; ambientColor = '#0a0a1a'; coreEmissive = '#60a0ff';
+    } else if (avg >= 0.35) {
+      // Growing — deep violet. New connections forming.
+      fogColor = '#080010'; ambientColor = '#0d0a18'; coreEmissive = '#9040ff';
+    } else {
+      // Tension — warm red. The mind is struggling to cohere.
+      fogColor = '#100005'; ambientColor = '#140808'; coreEmissive = '#ff4020';
+    }
+
+    mainScene.setAttribute('fog', `type: exponential; color: ${fogColor}; density: 0.015`);
+    if (ambientEl) ambientEl.setAttribute('color', ambientColor);
+    if (core) {
+      core.setAttribute('animation__mood',
+        `property: material.emissive; from: #60a0ff; to: ${coreEmissive}; dur: 4000; easing: easeInOutSine`);
+    }
+  }
+
   window.MatrixVR = {
     spawnMindNode,
     pulseResonance,
@@ -938,7 +1101,9 @@
     activatePurpose,
     emitVrReflection,
     openIdeaPanel,
+    clearConnections,
     status: () => ({ connected, nodeCount, userId: VR_USER_ID })
   };
 
 })();
+

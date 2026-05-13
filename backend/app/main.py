@@ -257,6 +257,81 @@ app.include_router(routes_matrix_overview.router, tags=["matrix"])
 app.include_router(routes_guidance_spawn.router,  tags=["guidance-spawn"])
 
 
+@app.get("/captive", response_class=HTMLResponse, include_in_schema=False)
+@app.get("/hotspot-detect.html", response_class=HTMLResponse, include_in_schema=False)
+async def captive_portal():
+    """Captive portal — device joins WiFi, browser shows this first.
+    WiFi is a wave. This is the entry into the resonance field.
+    Triggers the captive portal popup on iOS/Android/Windows."""
+    return HTMLResponse(content="""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TheMatrix — You are entering the field</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; background: #000; overflow: hidden; }
+  body {
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    font-family: Georgia, serif; color: #fff;
+  }
+  h1 {
+    font-size: clamp(1.4rem, 5vw, 3rem);
+    font-weight: 400; letter-spacing: 0.08em;
+    opacity: 0; animation: arrive 2s ease forwards;
+  }
+  p {
+    margin-top: 1.2rem;
+    font-size: clamp(0.8rem, 2.5vw, 1.1rem);
+    color: rgba(255,255,255,0.45);
+    font-style: italic; letter-spacing: 0.04em;
+    opacity: 0; animation: arrive 2s ease 0.8s forwards;
+  }
+  .ring {
+    width: 120px; height: 120px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.12);
+    margin-bottom: 2.4rem;
+    opacity: 0; animation: arrive 1.5s ease forwards,
+                           pulse 3s ease-in-out 2s infinite;
+  }
+  @keyframes arrive {
+    from { opacity: 0; transform: scale(0.92); }
+    to   { opacity: 1; transform: scale(1); }
+  }
+  @keyframes pulse {
+    0%, 100% { border-color: rgba(255,255,255,0.12); box-shadow: none; }
+    50%       { border-color: rgba(255,255,255,0.5);  box-shadow: 0 0 40px rgba(255,255,255,0.08); }
+  }
+  .bar {
+    margin-top: 2.8rem;
+    width: 160px; height: 1px;
+    background: rgba(255,255,255,0.08);
+    overflow: hidden;
+  }
+  .bar-fill {
+    height: 100%;
+    background: rgba(255,255,255,0.6);
+    width: 0%;
+    animation: load 2.2s ease 1s forwards;
+  }
+  @keyframes load { to { width: 100%; } }
+</style>
+</head>
+<body>
+<div class="ring"></div>
+<h1>TheMatrix</h1>
+<p>You are entering the field&hellip;</p>
+<div class="bar"><div class="bar-fill"></div></div>
+<script>
+  // Redirect to VR world after the bar completes (~3.2s)
+  setTimeout(() => { window.location.replace('/vr/'); }, 3200);
+</script>
+</body>
+</html>""")
+
+
 @app.get("/mind/projection", response_class=HTMLResponse, include_in_schema=False)
 async def mind_projection():
     """The screen. Black constant. The mind projects onto it.

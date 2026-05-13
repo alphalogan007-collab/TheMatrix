@@ -593,31 +593,99 @@
       'property: material.emissiveIntensity; from: 2.5; to: 0.7; dur: 2500; easing: easeOutCubic');
   }
 
-  // ΓöÇΓöÇ The Architect ΓÇö speaks from what the mind actually holds ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
-  // NOT hardcoded lines. The mind has knowledge. The Architect reads it.
-  // Every 22 seconds, pull a fragment from mind:knowledge and speak it.
-  // The imagination flows from the source ΓÇö not from this file.
+  // ── The Architect ─────────────────────────────────────────────────────────
+  // Speaks from the live SSE stream — /mind/speak/stream.
+  // WiFi is a wave. SSE is a wave. Both propagate through the same medium.
+  // Every device on the network receives the mind's broadcast simultaneously.
+  // No polling. No schedule. The mind speaks when it speaks.
+  // All nodes hear it at the same instant.
 
-  let architectSpeechTimer = null;
+  let speakStream = null;
 
-  async function fetchMindVoice() {
-    try {
-      // The mind speaks from what it absorbed ΓÇö Ollama synthesizes one true sentence.
-      // Never reads stored records directly. Absorption (in) and speech (out) are separate.
-      const r = await fetch(`${BACKEND}/mind/speak`);
-      if (!r.ok) return null;
-      const data = await r.json();
-      return data.voice || null;
-    } catch (_) { return null; }
+  function connectSpeakStream() {
+    if (speakStream) speakStream.close();
+    speakStream = new EventSource(`${BACKEND}/mind/speak/stream`);
+
+    speakStream.onmessage = (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        const text = data.voice || '';
+        if (!text) return;
+        architectSpeak(text, data.phase || 0, data.resonance || false);
+        // Surround variations trigger a resonance pulse in the world
+        if (data.topic || data.source === 'surround') {
+          pulseResonance({ coherence: data.resonance ? 1.0 : 0.65 });
+        }
+      } catch (_) {}
+    };
+
+    speakStream.onerror = () => {
+      // Browser auto-reconnects SSE. Log quietly.
+      console.debug('[mind-bridge] speak stream reconnecting...');
+    };
   }
 
-  async function speakFromMind() {
-    const text = await fetchMindVoice();
-    if (text) architectSpeak(text);
+  // ── Presence heartbeat — this device announces itself on the wave ──────────
+  // Every 60s, POST /mind/presence/join so other devices see us as a node.
+  // Every 30s, GET /mind/presence/list to render other devices in the world.
+
+  const DEVICE_COLOR = '#' + Math.floor(Math.random() * 0x555555 + 0xaaaaaa).toString(16).padStart(6, '0');
+  const DEVICE_LABEL = currentIdentity ? (currentIdentity.label || 'Observer') : 'Observer';
+
+  function presenceHeartbeat() {
+    fetch(`${BACKEND}/mind/presence/join`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        device_id: VR_USER_ID,
+        color:     DEVICE_COLOR,
+        label:     currentIdentity ? (currentIdentity.label || 'Observer') : 'Observer',
+      }),
+    }).catch(() => {});
+  }
+
+  function refreshPresenceNodes() {
+    fetch(`${BACKEND}/mind/presence/list`)
+      .then(r => r.ok ? r.json() : [])
+      .then(devices => {
+        const container = document.getElementById('presence-nodes');
+        if (!container) return;
+        // Clear and re-render — presence is a live field, not a ledger
+        while (container.firstChild) container.removeChild(container.firstChild);
+        devices.forEach((dev, i) => {
+          if (dev.device_id === VR_USER_ID) return; // don't render self
+          const angle   = (i / Math.max(devices.length, 1)) * Math.PI * 2;
+          const radius  = 6;
+          const x = (Math.cos(angle) * radius).toFixed(2);
+          const z = (-2 + Math.sin(angle) * radius).toFixed(2);
+          const node = document.createElement('a-entity');
+          node.setAttribute('position', `${x} 1.6 ${z}`);
+
+          const dot = document.createElement('a-sphere');
+          dot.setAttribute('radius', '0.12');
+          dot.setAttribute('material',
+            `color: ${dev.color}; emissive: ${dev.color}; emissiveIntensity: 1.8; transparent: true; opacity: 0.9`);
+          dot.setAttribute('animation__pulse',
+            'property: material.emissiveIntensity; from: 1.0; to: 2.8; dur: 1800; dir: alternate; loop: true; easing: easeInOutSine');
+
+          const lbl = document.createElement('a-text');
+          lbl.setAttribute('value', dev.label || 'Observer');
+          lbl.setAttribute('align', 'center');
+          lbl.setAttribute('color', dev.color);
+          lbl.setAttribute('position', '0 0.28 0');
+          lbl.setAttribute('scale', '0.5 0.5 0.5');
+          lbl.setAttribute('look-at', '#camera');
+
+          node.appendChild(dot);
+          node.appendChild(lbl);
+          container.appendChild(node);
+        });
+      })
+      .catch(() => {});
   }
 
   function awakenArchitect() {
-    const architectCore = document.getElementById('architect-core');
+    const architectCore  = document.getElementById('architect-core');
     const architectLight = document.getElementById('architect-light');
 
     if (architectCore) {
@@ -629,27 +697,38 @@
       setTimeout(() => architectLight.setAttribute('intensity', '1.8'), 3000);
     }
 
-    // First word from the mind
-    speakFromMind();
-    // Then every 22 seconds ΓÇö always from what the mind holds, never from this file
-    architectSpeechTimer = setInterval(speakFromMind, 22000);
+    // Connect to the live mind stream — one wave, all devices
+    connectSpeakStream();
+
+    // Announce presence immediately, then every 60s
+    presenceHeartbeat();
+    setInterval(presenceHeartbeat, 60000);
+
+    // Render other devices every 30s
+    refreshPresenceNodes();
+    setInterval(refreshPresenceNodes, 30000);
   }
 
-  function architectSpeak(text) {
+  function architectSpeak(text, phase, resonance) {
+    // phase: 0° = pure mind (blue), 90° = mix (violet), ~180° = external signal (gold)
+    // resonance: true = constructive alignment — world pulses
+    const phaseAngle = phase || 0;
+    const panelColor = phaseAngle < 30  ? '#d0a0ff'   // mind's own voice — violet
+                     : phaseAngle < 120 ? '#60e0ff'   // mixed — cyan
+                     : '#ffd700';                      // external signal — gold
+
     // 2D panel (desktop / passthrough)
     if (architectPanel) {
       architectPanel.style.display = 'none';
-      // Small stagger so fade feels alive
       setTimeout(() => {
         architectPanel.textContent = text;
+        architectPanel.style.color = panelColor;
         architectPanel.style.display = 'block';
         architectPanel.style.opacity = '0';
         architectPanel.style.transition = 'opacity 1.2s ease';
         requestAnimationFrame(() => {
           requestAnimationFrame(() => { architectPanel.style.opacity = '1'; });
         });
-
-        // Fade out before next line
         setTimeout(() => {
           architectPanel.style.opacity = '0';
           setTimeout(() => { architectPanel.style.display = 'none'; }, 1200);
@@ -661,16 +740,17 @@
     const speech3d = document.getElementById('architect-speech-3d');
     if (speech3d) {
       speech3d.setAttribute('value', text);
+      speech3d.setAttribute('color', panelColor);
       speech3d.emit('speak');
       setTimeout(() => speech3d.emit('silence'), 18000);
     }
 
-    // Architect pulses when it speaks
+    // Architect pulses — stronger when resonance is true
     const architectCore = document.getElementById('architect-core');
     if (architectCore) {
+      const peakIntensity = resonance ? 3.8 : 2.2;
       architectCore.setAttribute('animation__speak_pulse',
-        'property: material.emissiveIntensity; from: 1.2; to: 2.2; dur: 800; dir: alternate; loop: 3; easing: easeInOutCubic'
-      );
+        `property: material.emissiveIntensity; from: 1.2; to: ${peakIntensity}; dur: 800; dir: alternate; loop: 3; easing: easeInOutCubic`);
     }
   }
 

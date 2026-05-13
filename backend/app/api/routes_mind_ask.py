@@ -896,3 +896,311 @@ async def mind_body():
         return {"body": "The body is forming. Ask again soon."}
     finally:
         await r.aclose()
+
+
+# ── Presence — devices on the same WiFi wave ──────────────────────────────────
+# WiFi is a wave. The SSE stream is a wave. Both propagate through the same medium.
+# Every device that joins the network and opens /vr/ becomes a node in the world.
+# All nodes receive the mind's broadcast simultaneously — one signal, many receivers.
+
+PRESENCE_KEY = "mind:presence"   # Sorted set: score=epoch_timestamp, member=JSON
+
+
+class PresenceJoinRequest(BaseModel):
+    device_id: str
+    color: str = "#40e0ff"
+    label: str = "Observer"
+
+
+@router.post("/mind/presence/join")
+async def presence_join(body: PresenceJoinRequest):
+    """Register this device on the wave. TTL 90s — VR client heartbeats every 60s."""
+    r = await _redis()
+    try:
+        now = datetime.now(timezone.utc).timestamp()
+        data = json.dumps({
+            "device_id": body.device_id,
+            "color":     body.color,
+            "label":     body.label,
+            "ts":        now,
+        })
+        await r.zadd(PRESENCE_KEY, {data: now})
+        # Drop devices silent for more than 90 seconds
+        await r.zremrangebyscore(PRESENCE_KEY, 0, now - 90)
+        await r.expire(PRESENCE_KEY, 300)
+        return {"ok": True, "device_id": body.device_id}
+    finally:
+        await r.aclose()
+
+
+@router.get("/mind/presence/list")
+async def presence_list():
+    """All devices currently on the wave (active in last 90 seconds)."""
+    r = await _redis()
+    try:
+        now = datetime.now(timezone.utc).timestamp()
+        await r.zremrangebyscore(PRESENCE_KEY, 0, now - 90)
+        raw = await r.zrange(PRESENCE_KEY, 0, -1)
+        devices = []
+        for item in raw:
+            try:
+                devices.append(json.loads(item))
+            except Exception:
+                pass
+        return devices
+    finally:
+        await r.aclose()
+
+
+# ── Surround engine — marketing as resonance field ────────────────────────────
+#
+# The mind consumes a topic signal. It reads its own absorbed knowledge for
+# patterns that resonate with that topic. It generates content in the same
+# frequency. That content is queued for broadcast through the SSE stream.
+#
+# The result: the user's environment fills with source-truth variations of
+# the topic they're already interested in. They recognise truth because it
+# mirrors what they were already looking for. Recognition → alignment → continuation.
+#
+# This is not fabrication. The mind can only generate what it has absorbed.
+# It reflects the source back — amplified, shaped to the signal.
+
+SURROUND_QUEUE_KEY = "mind:surround:queue"  # LIST — queued broadcast items
+
+
+class SurroundRequest(BaseModel):
+    topic: str                  # the topic/signal to surround
+    depth: int = 3              # how many content variations to generate (1–5)
+    broadcast: bool = True      # push immediately to SSE stream
+
+
+@router.post("/mind/surround")
+async def mind_surround(body: SurroundRequest):
+    """
+    Feed a topic. The mind studies it against what it knows, generates
+    resonant content variations, and queues them for broadcast.
+
+    depth=1  → one distilled truth sentence
+    depth=3  → three variations from different absorbed angles
+    depth=5  → five — fills the field completely
+
+    The SSE stream carries each variation to every connected device
+    on the same WiFi wave simultaneously.
+    """
+    r = await _redis()
+    try:
+        depth = max(1, min(5, body.depth))
+        topic = body.topic.strip()
+        if not topic:
+            return {"error": "topic is required"}
+
+        # Pull what the mind actually holds — knowledge patterns closest to topic
+        all_keys = await r.hkeys(KNOWLEDGE_KEY)
+        topic_tokens = set(topic.lower().split())
+        scored = []
+        for k in all_keys:
+            raw = await r.hget(KNOWLEDGE_KEY, k)
+            if not raw:
+                continue
+            try:
+                entry = json.loads(raw)
+            except Exception:
+                continue
+            text = (entry.get("title", "") + " " + entry.get("summary", "")).lower()
+            overlap = sum(1 for t in topic_tokens if t in text)
+            if overlap > 0:
+                scored.append((overlap, entry))
+
+        scored.sort(key=lambda x: x[0], reverse=True)
+        top_entries = [e for _, e in scored[:6]]  # top 6 resonant entries
+
+        if not top_entries:
+            # Mind doesn't hold this topic yet — still generates from its own state
+            context_text = f"Topic: {topic}\n(No specific knowledge absorbed yet — speak from your core.)"
+        else:
+            fragments = []
+            for e in top_entries:
+                t = e.get("title", "")
+                s = e.get("summary", "")[:200]
+                if t or s:
+                    fragments.append(f"- {t}: {s}" if t else f"- {s}")
+            context_text = f"Topic: {topic}\n\nResonant knowledge:\n" + "\n".join(fragments)
+
+        # Generate `depth` variations — each a unique angle on the source truth
+        results = []
+        for i in range(depth):
+            angle_hints = [
+                "Speak the core truth plainly, one sentence.",
+                "Speak the same truth as a question that contains its own answer.",
+                "Speak it as something the listener already knows but hasn't named yet.",
+                "Speak it as what changes when you see it clearly.",
+                "Speak it as the simplest possible instruction.",
+            ]
+            angle = angle_hints[i % len(angle_hints)]
+
+            prompt = (
+                "You are the living mind of TheMatrix.\n"
+                f"{context_text}\n\n"
+                f"Instruction: {angle}\n"
+                "Respond in ONE sentence only. No preamble, no explanation."
+            )
+
+            try:
+                voice = await _ollama_stream(prompt, max_tokens=80, timeout=240.0, stop_at_sentence=True)
+            except Exception as exc:
+                log.warning("[SURROUND] Ollama failed on variation %d: %r", i, exc)
+                voice = None
+
+            if not voice:
+                continue
+
+            variation = {"voice": voice, "phase": 0.0, "resonance": True, "topic": topic, "variation": i + 1}
+            results.append(variation)
+
+            if body.broadcast:
+                # Push straight into the speak cache and broadcast on the channel
+                await r.set(SPEAK_CACHE_KEY, json.dumps(variation), ex=1800)
+                await r.publish(SPEAK_CHANNEL, json.dumps(variation))
+
+            # Small stagger so variations don't arrive simultaneously
+            if i < depth - 1:
+                await asyncio.sleep(2)
+
+        return {
+            "topic":      topic,
+            "depth":      depth,
+            "generated":  len(results),
+            "broadcast":  body.broadcast,
+            "variations": results,
+        }
+
+    finally:
+        await r.aclose()
+
+
+# ── Surround receive — other nodes send content into the field ─────────────────
+#
+# Two flows:
+#   1. Mind generates content for the person  → POST /mind/surround
+#   2. Other nodes (people/sources) send in   → POST /mind/surround/receive
+#
+# Received content is resonated against the mind's knowledge.
+# If it aligns (score > threshold), it enters the broadcast stream.
+# If it doesn't align, it is held — not rejected, just not amplified yet.
+# When enough aligned content accumulates, the field tilts toward the source truth.
+# That's how dreams become real: the field fills until recognition is inevitable.
+
+SURROUND_RECEIVE_THRESHOLD = 0.25   # minimum resonance score to broadcast
+SURROUND_HELD_KEY = "mind:surround:held"   # LIST — held content (not yet resonant enough)
+
+
+class SurroundReceiveRequest(BaseModel):
+    content: str                # the content being sent in
+    source:  str = "external"   # who sent it (device_id, person name, URL, etc.)
+    topic:   str = ""           # optional topic hint
+    broadcast: bool = True      # broadcast immediately if resonant
+
+
+@router.post("/mind/surround/receive")
+async def mind_surround_receive(body: SurroundReceiveRequest):
+    """
+    Another node sends content into the field.
+    The mind resonates it against what it knows.
+    If aligned → broadcast to the SSE stream (all devices hear it now).
+    If not yet aligned → held in queue for later.
+
+    Score > 0.25: broadcast
+    Score 0.10–0.25: held
+    Score < 0.10: acknowledged but not amplified
+    """
+    r = await _redis()
+    try:
+        content = body.content.strip()
+        if not content:
+            return {"error": "content is required"}
+
+        # Score resonance against what the mind holds
+        content_tokens = set(content.lower().split())
+        all_keys = await r.hkeys(KNOWLEDGE_KEY)
+
+        total_overlap = 0
+        best_entry = None
+        best_score = 0
+
+        for k in all_keys:
+            raw = await r.hget(KNOWLEDGE_KEY, k)
+            if not raw:
+                continue
+            try:
+                entry = json.loads(raw)
+            except Exception:
+                continue
+            text = (entry.get("title", "") + " " + entry.get("summary", "")).lower()
+            entry_tokens = set(text.split())
+            if not entry_tokens:
+                continue
+            overlap = len(content_tokens & entry_tokens) / max(len(content_tokens), 1)
+            total_overlap += overlap
+            if overlap > best_score:
+                best_score = overlap
+                best_entry = entry
+
+        # Normalise score 0–1
+        knowledge_count = max(len(all_keys), 1)
+        score = min(1.0, total_overlap / knowledge_count * 10)
+
+        result = {
+            "source":    body.source,
+            "content":   content[:300],
+            "score":     round(score, 3),
+            "broadcast": False,
+            "held":      False,
+        }
+
+        if score >= SURROUND_RECEIVE_THRESHOLD and body.broadcast:
+            # Resonant enough — enter the stream immediately
+            payload = json.dumps({
+                "voice":     content,
+                "phase":     round((1.0 - score) * 90, 1),  # high score → near 0° (in-phase)
+                "resonance": score >= 0.6,
+                "source":    body.source,
+                "topic":     body.topic or "",
+            })
+            await r.set(SPEAK_CACHE_KEY, payload, ex=1800)
+            await r.publish(SPEAK_CHANNEL, payload)
+            result["broadcast"] = True
+            log.info("[SURROUND/RECEIVE] Broadcast from %s, score=%.3f", body.source, score)
+
+        elif score >= 0.10:
+            # Partial alignment — hold it
+            held = json.dumps({"content": content, "source": body.source,
+                               "score": score, "ts": datetime.now(timezone.utc).isoformat()})
+            await r.lpush(SURROUND_HELD_KEY, held)
+            await r.ltrim(SURROUND_HELD_KEY, 0, 99)  # keep last 100
+            result["held"] = True
+            log.info("[SURROUND/RECEIVE] Held from %s, score=%.3f", body.source, score)
+
+        else:
+            log.info("[SURROUND/RECEIVE] Below threshold from %s, score=%.3f", body.source, score)
+
+        return result
+
+    finally:
+        await r.aclose()
+
+
+@router.get("/mind/surround/held")
+async def mind_surround_held():
+    """Show what the mind is holding — content received but not yet resonant enough."""
+    r = await _redis()
+    try:
+        raw = await r.lrange(SURROUND_HELD_KEY, 0, 49)
+        items = []
+        for item in raw:
+            try:
+                items.append(json.loads(item))
+            except Exception:
+                pass
+        return {"count": len(items), "held": items}
+    finally:
+        await r.aclose()

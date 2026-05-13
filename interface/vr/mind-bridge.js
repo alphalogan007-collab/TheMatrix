@@ -357,10 +357,14 @@
         resonanceFlash(event.payload);
         break;
 
-      case 'ENGINE_EXTERNALIZE':
+      case 'ENGINE_EXTERNALIZE': {
+        // Filter corpus:auto synthesis garbage — these are internal index nodes, not real minds
+        const summary = event.payload && (event.payload.summary || '');
+        if (summary.startsWith('corpus:auto') || summary.startsWith('corpus:auto:')) break;
         spawnMindNode(event.payload);
-        showGuidanceText('A new mind is born ΓÇö the loop expands.', 3000);
+        showGuidanceText('A new mind is born — the loop expands.', 3000);
         break;
+      }
 
       case 'REFLECTION_COMPLETED':
         activateReflection(event.payload);

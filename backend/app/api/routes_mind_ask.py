@@ -658,7 +658,7 @@ async def speak_refresh_loop() -> None:
                 try:
                     prompt = await _build_speak_prompt(r)
                     if prompt:
-                        voice = await _ollama_stream(prompt, max_tokens=80, timeout=300.0, stop_at_sentence=True)
+                        voice = await _ollama_stream(prompt, max_tokens=200, timeout=300.0, stop_at_sentence=False)
                         if voice:
                             await r.set(SPEAK_CACHE_KEY, voice, ex=1800)  # TTL 30 min
                             # Broadcast as JSON so stream carries phase metadata

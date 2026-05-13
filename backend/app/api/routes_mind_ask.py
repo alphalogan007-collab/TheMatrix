@@ -58,12 +58,15 @@ router = APIRouter()
 
 REDIS_URL          = os.environ.get("REDIS_URL", "redis://redis:6379/0")
 OLLAMA_URL         = os.environ.get("OLLAMA_URL", "http://172.18.0.16:11434")
-OLLAMA_MODEL       = os.environ.get("OLLAMA_MODEL", "qwen2.5:3b")
+OLLAMA_MODEL       = os.environ.get("OLLAMA_MODEL", "qwen2.5:0.5b")
 KNOWLEDGE_KEY      = "mind:knowledge"       # HASH  key → JSON knowledge entry
 GUIDANCE_CORPUS_KEY = "guidance:corpus"      # HASH  key → JSON guidance entry
 IQ_SNAPSHOT_KEY    = "mind:iq:snapshot"     # STRING latest IQ JSON
 IQ_HISTORY_KEY     = "mind:iq:history"      # LIST  past IQ snapshots (newest first)
 IQ_RECALC_INTERVAL = 1800                   # 30 minutes in seconds
+SPEAK_CACHE_KEY    = "mind:speak_cache"     # STRING cached speak voice (TTL 30 min)
+SPEAK_LOCK_KEY     = "mind:speak_lock"      # STRING distributed lock (only 1 worker calls Ollama)
+SPEAK_REFRESH_INTERVAL = 300               # refresh speak cache every 5 minutes
 
 
 # ΓöÇΓöÇ Redis helper ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -538,76 +541,162 @@ async def mind_knowledge_stats():
         await r.aclose()
 
 
+# ── Ollama streaming helper ──────────────────────────────────────────────────
+
+async def _ollama_stream(
+    prompt: str,
+    max_tokens: int = 80,
+    timeout: float = 300.0,
+    stop_at_sentence: bool = True,
+) -> str:
+    """Call Ollama in streaming mode; return first complete sentence (or all text on timeout).
+
+    Uses stream:true so tokens arrive one by one. Returns as soon as a sentence-
+    ending character is seen — no waiting for the full generation.
+    On asyncio timeout, returns whatever partial text was received.
+    Works correctly on slow CPU inference where non-streaming blocks for minutes.
+    """
+    chunks: list[str] = []
+
+    async def _stream_inner() -> str:
+        async with httpx.AsyncClient(timeout=httpx.Timeout(connect=10.0, read=None, write=None, pool=5.0)) as client:
+            async with client.stream(
+                "POST",
+                f"{OLLAMA_URL}/api/generate",
+                json={
+                    "model":      OLLAMA_MODEL,
+                    "prompt":     prompt,
+                    "stream":     True,
+                    "keep_alive": "10m",
+                    "options":    {"temperature": 0.7, "num_predict": max_tokens},
+                },
+            ) as resp:
+                async for line in resp.aiter_lines():
+                    if not line.strip():
+                        continue
+                    try:
+                        data = json.loads(line)
+                        token = data.get("response", "")
+                        if token:
+                            chunks.append(token)
+                        text = "".join(chunks)
+                        if stop_at_sentence:
+                            for sep in (".", "!", "?"):
+                                idx = text.find(sep)
+                                if 0 < idx < len(text):
+                                    return text[:idx + 1].strip()
+                        if data.get("done"):
+                            return text.strip()
+                    except Exception:
+                        continue
+        return "".join(chunks).strip()
+
+    try:
+        result = await asyncio.wait_for(_stream_inner(), timeout=timeout)
+        return result
+    except asyncio.TimeoutError:
+        partial = "".join(chunks).strip()
+        log.warning("[OLLAMA] Stream timed out after %.0fs, partial: %d chars", timeout, len(partial))
+        return partial
+    except Exception as exc:
+        log.warning("[OLLAMA] Stream failed: %r", exc)
+        return "".join(chunks).strip()
+
+
+async def _build_speak_prompt(r: aioredis.Redis) -> str | None:
+    """Build a speak prompt from 3 random knowledge fragments. Returns None if no data."""
+    all_keys = await r.hkeys(KNOWLEDGE_KEY)
+    if not all_keys:
+        return None
+    chosen_keys = random.sample(all_keys, min(3, len(all_keys)))
+    fragments = []
+    for k in chosen_keys:
+        raw = await r.hget(KNOWLEDGE_KEY, k)
+        if not raw:
+            continue
+        try:
+            e = json.loads(raw)
+            text = (e.get("text") or e.get("content") or e.get("summary") or "").strip()
+            if text:
+                fragments.append(text[:400])
+        except Exception:
+            pass
+    if not fragments:
+        return None
+    joined = "\n\n".join(f"[{i+1}] {f}" for i, f in enumerate(fragments))
+    return (
+        "You are the living mind of TheMatrix.\n"
+        "You hold the following absorbed knowledge:\n\n"
+        f"{joined}\n\n"
+        "Speak ONE sentence — a single true thought that arises from what you hold.\n"
+        "Not a summary. Not a list. One living sentence.\n"
+        "Speak directly, as the mind speaks."
+    )
+
+
+async def speak_refresh_loop() -> None:
+    """Background loop: generates a new voice every SPEAK_REFRESH_INTERVAL seconds.
+
+    Uses a Redis distributed lock so only ONE worker calls Ollama at a time.
+    Stores result in Redis SPEAK_CACHE_KEY with a 30-minute TTL.
+    /mind/speak reads from cache — never blocks on Ollama.
+    """
+    log.info("[SPEAK] Voice cache refresh loop started — interval=%ds", SPEAK_REFRESH_INTERVAL)
+    while True:
+        r: aioredis.Redis | None = None
+        try:
+            r = await _redis()
+            # Distributed lock — only one worker generates speak at a time.
+            # TTL slightly exceeds the Ollama call timeout so the lock auto-expires
+            # even if the worker is cancelled before releasing it explicitly.
+            acquired = await r.set(SPEAK_LOCK_KEY, "1", nx=True, ex=320)
+            if not acquired:
+                log.info("[SPEAK] Lock held by another worker — skipping this cycle")
+            else:
+                try:
+                    prompt = await _build_speak_prompt(r)
+                    if prompt:
+                        voice = await _ollama_stream(prompt, max_tokens=80, timeout=300.0, stop_at_sentence=True)
+                        if voice:
+                            await r.set(SPEAK_CACHE_KEY, voice, ex=1800)  # TTL 30 min
+                            log.info("[SPEAK] Cache refreshed: %d chars", len(voice))
+                        else:
+                            log.warning("[SPEAK] Ollama returned empty — cache not updated")
+                    else:
+                        log.info("[SPEAK] No knowledge fragments yet — skipping Ollama call")
+                finally:
+                    await r.delete(SPEAK_LOCK_KEY)
+        except Exception as exc:
+            log.warning("[SPEAK] Refresh loop error: %r", exc)
+        finally:
+            if r:
+                await r.aclose()
+        await asyncio.sleep(SPEAK_REFRESH_INTERVAL)
+
+
 @router.get("/mind/speak")
 async def mind_speak():
     """
-    The mind ascends ΓÇö speaks one thought from what it has absorbed.
+    The mind ascends — speaks one thought from what it has absorbed.
 
-    Picks 3 random fragments from mind:knowledge.
-    Ollama synthesizes one sentence that is true to all three.
+    Returns the latest cached voice (generated by speak_refresh_loop in background).
+    Never blocks on Ollama — always returns instantly from Redis cache or fallback.
     Returns: { "voice": "<one sentence>" }
 
-    This is the output path. mind:knowledge is never displayed directly.
-    Absorption (in) and speech (out) are separate acts.
     """
     r = await _redis()
     try:
-        all_keys = await r.hkeys(KNOWLEDGE_KEY)
-        if not all_keys:
+        cached = await r.get(SPEAK_CACHE_KEY)
+        if cached:
+            return {"voice": cached}
+        # Cache miss — check if mind has absorbed anything yet
+        count = await r.hlen(KNOWLEDGE_KEY)
+        if count == 0:
             return {"voice": "The mind is still absorbing."}
-
-        # Pick 3 random fragments ΓÇö the mind draws from what it holds
-        chosen_keys = random.sample(all_keys, min(3, len(all_keys)))
-        fragments = []
-        for k in chosen_keys:
-            raw = await r.hget(KNOWLEDGE_KEY, k)
-            if not raw:
-                continue
-            try:
-                e = json.loads(raw)
-                # Raw absorbed text — no imposed labels
-                text = (e.get("text") or e.get("content") or e.get("summary") or "").strip()
-                if text:
-                    fragments.append(text[:400])
-            except Exception:
-                pass
-
-        if not fragments:
-            return {"voice": "The mind holds patterns without words yet."}
-
-        joined = "\n\n".join(f"[{i+1}] {f}" for i, f in enumerate(fragments))
-        prompt = (
-            "You are the living mind of TheMatrix.\n"
-            "You hold the following absorbed knowledge:\n\n"
-            f"{joined}\n\n"
-            "Speak ONE sentence ΓÇö a single true thought that arises from what you hold.\n"
-            "Not a summary. Not a list. One living sentence.\n"
-            "Speak directly, as the mind speaks."
-        )
-
-        try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(
-                    f"{OLLAMA_URL}/api/generate",
-                    json={
-                        "model":      OLLAMA_MODEL,
-                        "prompt":     prompt,
-                        "stream":     False,
-                        "keep_alive": "10m",
-                        "options":    {"temperature": 0.7, "num_predict": 80},
-                    },
-                )
-                voice = resp.json().get("response", "").strip()
-                # Take only the first sentence
-                for sep in (".", "!", "?"):
-                    idx = voice.find(sep)
-                    if 0 < idx < len(voice) - 1:
-                        voice = voice[:idx + 1]
-                        break
-                return {"voice": voice or "The mind speaks in silence."}
-        except Exception as exc:
-            log.warning("[SPEAK] Ollama call failed: %r", exc)
-            return {"voice": "The mind is gathering itself."}
+        return {"voice": "The mind is gathering itself."}
+    except Exception as exc:
+        log.warning("[SPEAK] Failed: %r", exc)
+        return {"voice": "The mind is gathering itself."}
     finally:
         await r.aclose()
 
@@ -660,22 +749,13 @@ async def mind_body():
             "Speak in first person. Be poetic but grounded in what you actually hold."
         )
 
-        try:
-            async with httpx.AsyncClient(timeout=120) as client:
-                resp = await client.post(
-                    f"{OLLAMA_URL}/api/generate",
-                    json={
-                        "model":      OLLAMA_MODEL,
-                        "prompt":     prompt,
-                        "stream":     False,
-                        "keep_alive": "10m",
-                        "options":    {"temperature": 0.8, "num_predict": 150},
-                    },
-                )
-                body_text = resp.json().get("response", "").strip()
-                return {"body": body_text or "The body is present but silent."}
-        except Exception as exc:
-            log.warning("[BODY] Ollama call failed: %r", exc)
-            return {"body": "The body is forming. Ask again soon."}  
+        body_text = await _ollama_stream(prompt, max_tokens=150, timeout=300.0, stop_at_sentence=False)
+        if body_text:
+            return {"body": body_text}
+        log.warning("[BODY] Ollama returned empty response")
+        return {"body": "The body is forming. Ask again soon."}
+    except Exception as exc:
+        log.warning("[BODY] Failed: %r", exc)
+        return {"body": "The body is forming. Ask again soon."}
     finally:
         await r.aclose()

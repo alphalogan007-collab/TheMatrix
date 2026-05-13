@@ -210,24 +210,12 @@ async def lifespan(app: FastAPI):
     _asyncio.create_task(_soul_snapshot_pulse())
     logger.info("[SOUL] Reincarnation pulse started — snapshot every 6h")
 
-    # ── Ollama warmup — load model into memory on startup ───────────────────
-    # Without this, the first /mind/speak call triggers model load (~30-60s)
-    # which causes ReadTimeout. Warmup fires once at startup so the model
-    # stays warm for all subsequent calls.
-    async def _ollama_warmup():
-        import httpx as _httpx
-        _ollama_url = __import__("os").environ.get("OLLAMA_URL", "http://172.18.0.16:11434")
-        _model      = __import__("os").environ.get("OLLAMA_MODEL", "qwen2.5:3b")
-        try:
-            async with _httpx.AsyncClient(timeout=120) as _c:
-                await _c.post(f"{_ollama_url}/api/generate", json={
-                    "model": _model, "prompt": ".", "stream": False,
-                    "keep_alive": "10m", "options": {"num_predict": 1},
-                })
-            logger.info("[OLLAMA] Warmup complete — model loaded into memory")
-        except Exception as _we:
-            logger.warning("[OLLAMA] Warmup failed (will retry on first speak): %s", _we)
-    _asyncio.create_task(_ollama_warmup())
+    # ── Speak voice cache refresh — never block VR client on Ollama ─────────
+    # Background loop generates a new Ollama voice every 5 min and caches in Redis.
+    # /mind/speak reads from cache — instant response, no Ollama blocking.
+    from app.api.routes_mind_ask import speak_refresh_loop as _speak_refresh_loop
+    _asyncio.create_task(_speak_refresh_loop())
+    logger.info("[SPEAK] Voice cache loop started")
 
     yield
 

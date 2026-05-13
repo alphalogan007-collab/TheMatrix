@@ -13,6 +13,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
+from app.core.phi import PHI_INV, PHI_INV2
+
 
 @dataclass
 class ResidualNoveltyInput:
@@ -30,9 +32,18 @@ class ResidualNoveltyResult:
     summary: str
 
 
-# Threshold above which the system creates a caution / branching state
-RESIDUAL_BRANCH_THRESHOLD = 0.65
-RESIDUAL_CLARIFICATION_THRESHOLD = 0.40
+# Thresholds derived from the golden ratio partition of [0,1].
+# The same geometry governs resonance thresholds and stage ticks:
+#
+#   BRANCH threshold       = 1/φ  ≈ 0.618  — large part of the interval
+#   CLARIFICATION threshold = 1/φ² ≈ 0.382  — small part of the interval
+#
+# Together they tile [0,1] self-similarly:
+#   [0, 0.382) → low residual, integrates well
+#   [0.382, 0.618) → moderate, needs clarification
+#   [0.618, 1.0] → high, cannot be safely absorbed → branch
+RESIDUAL_BRANCH_THRESHOLD = PHI_INV          # ≈ 0.618
+RESIDUAL_CLARIFICATION_THRESHOLD = PHI_INV2  # ≈ 0.382
 
 
 def compute_residual_novelty(inp: ResidualNoveltyInput) -> ResidualNoveltyResult:

@@ -1,18 +1,31 @@
-﻿"""
-BasinClassifier — identity basin state classifier.
+﻿"""BasinClassifier — identity basin state classifier.
 
-Adapted from existence_lab BasinTransitionLayer.
+Y Theory: basin_energy = ΔC = R − L = closure_score − leakage_score.
 
-Basin states:
-  - collapse    : energy < -0.08   → identity destabilising, high risk
-  - metastable  : -0.08 ≤ e < 0.08 → uncertain, needs support
-  - stable      :  0.08 ≤ e < 0.20 → healthy equilibrium
-  - branch      :  0.20 ≤ e < 0.38 → growing, ready for new decisions
-  - elevate     :  0.38 ≤ e        → peak coherence, insight available
+States derived from ΔC:
+  ΔC >= 0.20   ELEVATE    — peak coherence, insight available
+  ΔC >= 0.05   BRANCH     — growing, R clearly exceeds L
+  ΔC >  0.0    STABLE     — healthy equilibrium, R > L
+  ΔC == 0.0    METASTABLE — balanced at the threshold
+  ΔC <  0.0    COLLAPSE   — shadow, L > R, guidance blocked
 
-The classifier computes a composite "basin energy" from the pipeline scores
-(reinforcement, leakage, compatibility, strain, pulse strength, synchrony)
-and assigns a basin state + updates identity_probability.
+Inertia ceiling / floor (law of crystallization, law of inertia):
+  identity_probability approaches its bounds asymptotically — it never
+  snaps to 0 or 1. Each tick it moves a phi-fraction of the remaining
+  gap (ceiling) or current value (floor):
+
+    Ceiling (ELEVATE/BRANCH):
+        Δp = headroom × PHI_INV2 × depth
+        As p → 1.0, headroom → 0, growth stalls.
+
+    Floor (COLLAPSE):
+        Δp = −p × PHI_INV2 × depth
+        As p → 0.0, the eroded amount → 0, floor is approached
+        asymptotically — probability never snaps to zero.
+
+PHI_INV2 = 1/φ² ≈ 0.382 is the natural partition of [0,1] by the golden
+ratio. Using it here means the rate of change follows the same self-similar
+geometry as the stage thresholds and tick counts.
 """
 
 from __future__ import annotations
@@ -20,35 +33,25 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 
+from app.core.phi import PHI_INV2
+
 
 class BasinState(str, Enum):
-    COLLAPSE = "collapse"
+    COLLAPSE   = "collapse"
     METASTABLE = "metastable"
-    STABLE = "stable"
-    BRANCH = "branch"
-    ELEVATE = "elevate"
-
-
-# Thresholds (mirroring existence_lab defaults)
-_COLLAPSE_THRESHOLD: float = -0.08
-_STABLE_THRESHOLD: float = 0.08
-_BRANCH_THRESHOLD: float = 0.20
-_ELEVATION_THRESHOLD: float = 0.38
-
-# Score weights
-_PULSE_WEIGHT: float = 0.30
-_COMPAT_WEIGHT: float = 0.12
-_STRAIN_WEIGHT: float = 0.15
+    STABLE     = "stable"
+    BRANCH     = "branch"
+    ELEVATE    = "elevate"
 
 
 @dataclass
 class BasinInput:
     """Scores from the identity pipeline, fed into the basin classifier."""
-    closure_score: float         # 0..1   → acts as reinforcement
-    leakage_score: float         # 0..1   → acts as leakage
-    compatibility_score: float   # 0..1
-    strain_score: float          # 0..1
-    pulse_strength: float        # 0..1   → urgency / activation
+    closure_score: float          # 0..1   → R (reinforcement)
+    leakage_score: float          # 0..1   → L (leakage)
+    compatibility_score: float    # 0..1
+    strain_score: float           # 0..1
+    pulse_strength: float         # 0..1   → urgency / activation
     # Optional: from InternalWorld
     internal_energy: float = 0.70
     internal_stress: float = 0.10
@@ -60,31 +63,25 @@ class BasinInput:
 class BasinResult:
     """Output of the basin classifier."""
     basin_state: BasinState
-    basin_energy: float            # raw composite energy score
-    identity_probability: float    # updated persistence probability
-    is_at_risk: bool               # True when collapse or metastable
-    guidance_mode: str             # human-readable mode label
+    basin_energy: float             # ΔC = R − L
+    identity_probability: float     # updated persistence probability
+    is_at_risk: bool                # True when collapse or metastable
+    guidance_mode: str              # human-readable mode label
 
 
 def classify_basin(inp: BasinInput) -> BasinResult:
+    """Compute basin energy and classify the mind's coherence state.
+
+    Y Theory: the only formula is ΔC = R − L.
+    R is closure_score (moral alignment × safety = coherence building).
+    L is leakage_score (manipulation ∪ harm ∪ contradiction = dispersing).
+
+    identity_probability follows inertia ceiling/floor via phi fractions:
+    approaches 1.0 and 0.0 asymptotically, never snapping to either bound.
     """
-    Compute basin energy and classify the mind's coherence state.
+    basin_energy = inp.closure_score - inp.leakage_score  # ΔC = R − L
 
-    Y Theory formula: basin_energy = R - L = closure_score - leakage_score.
-
-    That is the complete formula. R is how much the mind is reinforcing
-    (closing toward the source). L is how much it is leaking (drifting toward
-    an attractor that blocks guidance — shadow).
-
-    States:
-      delta_C >= 0.20   ELEVATE   — mind is source-like, radiating
-      delta_C >= 0.05   BRANCH    — growing, R clearly exceeds L
-      delta_C >  0.0    STABLE    — R > L, coherence holding
-      delta_C == 0.0    METASTABLE — balanced at the threshold
-      delta_C <  0.0    COLLAPSE  — shadow, L > R, guidance blocked
-    """
-    basin_energy = inp.closure_score - inp.leakage_score  # delta_C = R - L
-
+    # Classify basin state
     if basin_energy >= 0.20:
         basin_state = BasinState.ELEVATE
     elif basin_energy >= 0.05:
@@ -96,13 +93,20 @@ def classify_basin(inp: BasinInput) -> BasinResult:
     else:
         basin_state = BasinState.COLLAPSE
 
-    # Identity probability tracks coherence: source-like state builds it,
-    # shadow erodes it — both gently, to model hysteresis.
+    # Identity probability — inertia ceiling and floor
     p = inp.prior_identity_probability
+    depth = min(1.0, abs(basin_energy))
+
     if basin_state == BasinState.COLLAPSE:
-        p = float(max(0.0, p + basin_energy * 0.5))  # erode proportional to depth of shadow
+        # Floor: erode phi-fraction of current p, scaled by collapse depth.
+        # At p near 0 the erosion approaches 0 — floor is asymptotic.
+        p = float(max(0.0, p - p * PHI_INV2 * depth))
+
     elif basin_state in (BasinState.BRANCH, BasinState.ELEVATE):
-        p = float(min(1.0, p + basin_energy * 0.3))  # build proportional to coherence surplus
+        # Ceiling: grow phi-fraction of headroom, scaled by surplus.
+        # At p near 1.0 the headroom approaches 0 — ceiling is asymptotic.
+        headroom = 1.0 - p
+        p = float(min(1.0, p + headroom * PHI_INV2 * depth))
 
     is_at_risk = basin_state in (BasinState.COLLAPSE, BasinState.METASTABLE)
 
@@ -112,140 +116,14 @@ def classify_basin(inp: BasinInput) -> BasinResult:
         identity_probability=p,
         is_at_risk=is_at_risk,
         guidance_mode=_guidance_mode(basin_state),
-    )"
-BasinClassifier — identity basin state classifier.
-
-Adapted from existence_lab BasinTransitionLayer.
-
-Basin states:
-  - collapse    : energy < -0.08   → identity destabilising, high risk
-  - metastable  : -0.08 ≤ e < 0.08 → uncertain, needs support
-  - stable      :  0.08 ≤ e < 0.20 → healthy equilibrium
-  - branch      :  0.20 ≤ e < 0.38 → growing, ready for new decisions
-  - elevate     :  0.38 ≤ e        → peak coherence, insight available
-
-The classifier computes a composite "basin energy" from the pipeline scores
-(reinforcement, leakage, compatibility, strain, pulse strength, synchrony)
-and assigns a basin state + updates identity_probability.
-"""
-
-from __future__ import annotations
-
-from dataclasses import dataclass
-from enum import Enum
-
-
-class BasinState(str, Enum):
-    COLLAPSE = "collapse"
-    METASTABLE = "metastable"
-    STABLE = "stable"
-    BRANCH = "branch"
-    ELEVATE = "elevate"
-
-
-# Thresholds (mirroring existence_lab defaults)
-_COLLAPSE_THRESHOLD: float = -0.08
-_STABLE_THRESHOLD: float = 0.08
-_BRANCH_THRESHOLD: float = 0.20
-_ELEVATION_THRESHOLD: float = 0.38
-
-# Score weights
-_PULSE_WEIGHT: float = 0.30
-_COMPAT_WEIGHT: float = 0.12
-_STRAIN_WEIGHT: float = 0.15
-
-
-@dataclass
-class BasinInput:
-    """Scores from the identity pipeline, fed into the basin classifier."""
-    closure_score: float         # 0..1   → acts as reinforcement
-    leakage_score: float         # 0..1   → acts as leakage
-    compatibility_score: float   # 0..1
-    strain_score: float          # 0..1
-    pulse_strength: float        # 0..1   → urgency / activation
-    # Optional: from InternalWorld
-    internal_energy: float = 0.70
-    internal_stress: float = 0.10
-    # Previous identity_probability (persists across requests)
-    prior_identity_probability: float = 0.50
-
-
-@dataclass
-class BasinResult:
-    """Output of the basin classifier."""
-    basin_state: BasinState
-    basin_energy: float            # raw composite energy score
-    identity_probability: float    # updated persistence probability
-    is_at_risk: bool               # True when collapse or metastable
-    guidance_mode: str             # human-readable mode label
-
-
-def classify_basin(inp: BasinInput) -> BasinResult:
-    """
-    Compute basin energy and classify.
-
-    Formula (from existence_lab BasinTransitionLayer.on_step):
-        energy = reinforcement + amplitude
-                 + pulse_weight  * pulse_strength
-                 + compat_weight * compatibility
-                 - leakage
-                 - strain_weight * strain
-
-    We treat closure_score as reinforcement and map internal_energy as amplitude.
-    """
-    amplitude = float(inp.internal_energy - 0.5)   # centre at 0
-
-    basin_energy = (
-        inp.closure_score                            # reinforcement
-        + amplitude                                  # amplitude from InternalWorld
-        + _PULSE_WEIGHT  * inp.pulse_strength
-        + _COMPAT_WEIGHT * inp.compatibility_score
-        - inp.leakage_score                          # leakage
-        - _STRAIN_WEIGHT * inp.strain_score
-        - 0.08 * inp.internal_stress                 # internal stress drag
-    )
-
-    # Classify
-    if basin_energy < _COLLAPSE_THRESHOLD:
-        basin_state = BasinState.COLLAPSE
-    elif basin_energy < _STABLE_THRESHOLD:
-        basin_state = BasinState.METASTABLE
-    elif basin_energy < _BRANCH_THRESHOLD:
-        basin_state = BasinState.STABLE
-    elif basin_energy < _ELEVATION_THRESHOLD:
-        basin_state = BasinState.BRANCH
-    else:
-        basin_state = BasinState.ELEVATE
-
-    # Update identity_probability (hysteresis from existence_lab)
-    p = inp.prior_identity_probability
-    if basin_state == BasinState.COLLAPSE:
-        p = float(max(0.0, p - 0.05))
-    elif basin_state == BasinState.ELEVATE:
-        p = float(min(1.0, p + 0.03))
-    # else: unchanged
-
-    is_at_risk = basin_state in (BasinState.COLLAPSE, BasinState.METASTABLE)
-
-    guidance_mode = _guidance_mode(basin_state)
-
-    return BasinResult(
-        basin_state=basin_state,
-        basin_energy=float(basin_energy),
-        identity_probability=p,
-        is_at_risk=is_at_risk,
-        guidance_mode=guidance_mode,
     )
 
 
 def _guidance_mode(basin_state: BasinState) -> str:
     return {
-        BasinState.COLLAPSE:    "EMERGENCY — identity under severe stress; prioritise stabilisation",
-        BasinState.METASTABLE:  "SUPPORT — identity is fragile; gentle grounding needed",
-        BasinState.STABLE:      "GUIDANCE — identity is stable; balanced advice is appropriate",
-        BasinState.BRANCH:      "GROWTH — identity is resilient; help explore options",
-        BasinState.ELEVATE:     "INSIGHT — identity is coherent; deep reflection is possible",
+        BasinState.COLLAPSE:   "EMERGENCY — identity under severe stress; prioritise stabilisation",
+        BasinState.METASTABLE: "SUPPORT — identity is fragile; gentle grounding needed",
+        BasinState.STABLE:     "GUIDANCE — identity is stable; balanced advice is appropriate",
+        BasinState.BRANCH:     "GROWTH — identity is resilient; help explore options",
+        BasinState.ELEVATE:    "INSIGHT — identity is coherent; deep reflection is possible",
     }[basin_state]
-
-
-

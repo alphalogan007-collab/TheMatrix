@@ -299,22 +299,48 @@ def _update_keywords(text: str, state: dict) -> dict:
 
 
 def _check_stage_advance(state: dict) -> int:
-    """Advance stage based on resonance depth and message count."""
+    """Advance stage based on resonance depth alone.
+
+    Threshold = phi_threshold(stage) = 1 − 1/φ^(stage+1)
+    Each stage requires deeper resonance than the last; the curve follows
+    phi decay — no stage threshold is arbitrarily chosen.
+
+    Stage 0: 0.382  Stage 1: 0.618  Stage 2: 0.764
+    Stage 3: 0.854  Stage 4: 0.910  Stage 5: 0.944  Stage 6: 0.966
+    """
+    from app.core.phi import phi_threshold
     stage = state.get("stage", 0)
     if stage >= 7:
         return 7
-    threshold = STAGES[stage].get("threshold", 999)
-    mc  = state.get("message_count", 0)
     res = state.get("resonance", 0.0)
-    if mc >= threshold and res >= 0.25:
+    if res >= phi_threshold(stage):
         return min(stage + 1, 7)
     return stage
 
 
 def _resonance_tick(state: dict, is_deep_message: bool) -> float:
-    """Slowly grow resonance with each interaction."""
+    """Grow resonance toward the stage threshold via inertia ceiling.
+
+    Inertia ceiling (law of crystallization):
+        gain = phi_fraction * gap_to_threshold
+
+    The gain shrinks as resonance approaches the advancement threshold —
+    convergent, not linear. This is the ceiling: you cannot sprint past
+    a threshold; the closer you get, the more each interaction costs.
+
+    Deep message:  gain = gap × PHI_INV  (≈ 61.8% of remaining gap × 0.15)
+    Light message: gain = gap × PHI_INV2 (≈ 38.2% of remaining gap × 0.15)
+
+    The 0.15 scale factor means a deep message at zero resonance gives
+    roughly 0.382 × 0.618 × 0.15 ≈ 0.035 — similar to the old flat 0.04 —
+    but the rate decays as the threshold is approached.
+    """
+    from app.core.phi import PHI_INV, PHI_INV2, phi_threshold
     res = state.get("resonance", 0.0)
-    tick = 0.04 if is_deep_message else 0.015
+    stage = state.get("stage", 0)
+    gap = max(0.0, phi_threshold(stage) - res)
+    gain_fraction = PHI_INV if is_deep_message else PHI_INV2
+    tick = max(0.001, gap * gain_fraction * 0.15)
     return min(1.0, res + tick)
 
 

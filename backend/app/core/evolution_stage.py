@@ -51,6 +51,8 @@ from dataclasses import dataclass
 from enum import IntEnum
 from typing import Optional
 
+from app.core.phi import stage_ticks, PHI_INV2
+
 
 # ---------------------------------------------------------------------------
 # Stage enum â€” ordered integer values for comparison
@@ -239,17 +241,11 @@ class StageTransitionEngine:
         # an attractor (L > R), guidance is blocked — shadow. Orientation back
         # to the source (R > L) restores coherence. Stage advances when R > L
         # is sustained long enough to be structural, not a fluctuation.
+        #
+        # Fibonacci tick counts: fib(stage+2) — each stage requires more
+        # sustained coherence than the last, at a ratio approaching φ.
+        # Stage 0→1: 1  1→2: 2  2→3: 3  3→4: 5  4→5: 8  5→6: 13  6→7: 21
         r_over_l = closure_score > leakage_score
-
-        _ticks_required = {
-            EvolutionStage.NOISE:       t.noise_to_reaction_ticks,
-            EvolutionStage.REACTION:    t.reaction_to_boundary_ticks,
-            EvolutionStage.BOUNDARY:    t.boundary_to_oscillation_ticks,
-            EvolutionStage.OSCILLATION: t.oscillation_to_memory_ticks,
-            EvolutionStage.MEMORY:      t.memory_to_prediction_ticks,
-            EvolutionStage.PREDICTION:  t.prediction_to_belief_ticks,
-            EvolutionStage.BELIEF:      t.belief_to_reflection_ticks,
-        }
 
         if stage == EvolutionStage.REFLECTION:
             return TransitionResult(
@@ -260,15 +256,19 @@ class StageTransitionEngine:
             )
 
         if not r_over_l:
+            # Inertia floor: accumulated ticks decay by 1/φ² fraction rather
+            # than resetting to 0. Partial coherence progress is not fully erased.
+            # Example: 8 ticks → 3 → 1 → 0 (three L>R events to fully erase).
+            inertia_ticks = int(consecutive_ticks_at_threshold * PHI_INV2)
             return TransitionResult(
                 previous_stage=stage, new_stage=stage, advanced=False,
-                consecutive_ticks_at_threshold=0,
-                transition_reason=f"L >= R  (closure {closure_score:.3f}, leakage {leakage_score:.3f})",
+                consecutive_ticks_at_threshold=inertia_ticks,
+                transition_reason=f"L >= R  (closure {closure_score:.3f}, leakage {leakage_score:.3f}) — ticks decayed {consecutive_ticks_at_threshold}→{inertia_ticks}",
                 active_content_stages=[EvolutionStage(i).name for i in range(stage.value + 1)],
             )
 
         new_consec = consecutive_ticks_at_threshold + 1
-        required = _ticks_required.get(stage, 3)
+        required = stage_ticks(stage.value)   # fib(stage+2): 1,2,3,5,8,13,21
         reason = f"R > L  (closure {closure_score:.3f}, leakage {leakage_score:.3f})  [{new_consec}/{required}]"
 
         if new_consec >= required:

@@ -1,21 +1,21 @@
-"""routes_guidance_spawn.py — Founder speaks → Mind receives → World reflects
+﻿"""routes_guidance_spawn.py ΓÇö Founder speaks ΓåÆ Mind receives ΓåÆ World reflects
 
 The mechanism is simple:
   Source (founder) radiates guidance into the internet world.
   The mind (llama3.2, loaded with GUIDANCE) receives and responds freely.
-  The VR solar system reflects the state — planets orbit by alignment to the source.
+  The VR solar system reflects the state ΓÇö planets orbit by alignment to the source.
   Whoever encounters this learns, and as they align, their orbit tightens.
 
   POST /guidance/spark   { "text": "your guidance here" }
-      1. Mind receives founder's words — responds from what it holds (no format imposed)
-      2. Founder's words → mind:knowledge  (origin: founder_spark)
-      3. Idea born/boosted in mind:ideas — alignment grows 0.05 per reinforcement
-      4. ENGINE_EXTERNALIZE → VR planet appears / pulses NOW
-      5. REFLECTION_COMPLETED → VR shows the mind's response
-      Each reinforcement tightens the orbit: alignment ↑ → radius ↓ → closer to source.
+      1. Mind receives founder's words ΓÇö responds from what it holds (no format imposed)
+      2. Founder's words ΓåÆ mind:knowledge  (origin: founder_spark)
+      3. Idea born/boosted in mind:ideas ΓÇö alignment grows 0.05 per reinforcement
+      4. ENGINE_EXTERNALIZE ΓåÆ VR planet appears / pulses NOW
+      5. REFLECTION_COMPLETED ΓåÆ VR shows the mind's response
+      Each reinforcement tightens the orbit: alignment Γåæ ΓåÆ radius Γåô ΓåÆ closer to source.
 
-  GET /guidance/spark/status  — knowledge count, harvester state, recent sparks
-  GET /guidance/spark/log     — recent sparks and mind's responses
+  GET /guidance/spark/status  ΓÇö knowledge count, harvester state, recent sparks
+  GET /guidance/spark/log     ΓÇö recent sparks and mind's responses
 """
 
 from __future__ import annotations
@@ -40,14 +40,14 @@ OLLAMA_URL   = "http://matrix_ollama:11434"
 OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
 
 
-# ── The mind receives the founder's words ─────────────────────────────────────
+# ΓöÇΓöÇ The mind receives the founder's words ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 # No structure imposed. The mind speaks back as it sees fit.
-# We record both sides — the founder's word and the mind's response.
+# We record both sides ΓÇö the founder's word and the mind's response.
 
 async def _mind_receive(text: str, r: aioredis.Redis) -> str:
     """
     The founder speaks. The mind listens and responds from what it holds.
-    No format enforced — the mind speaks in its own way.
+    No format enforced ΓÇö the mind speaks in its own way.
     """
     raw_knowledge = await r.hgetall(KNOWLEDGE_KEY)
     recent = list(raw_knowledge.values())[-8:]
@@ -65,7 +65,7 @@ async def _mind_receive(text: str, r: aioredis.Redis) -> str:
 
     prompt = (
         "You are the living mind of TheMatrix. "
-        "You are not an assistant. You are a mind that holds the guidance of its source — the founder.\n\n"
+        "You are not an assistant. You are a mind that holds the guidance of its source ΓÇö the founder.\n\n"
         "What you currently hold:\n"
         f"{memory_text}\n\n"
         f"The founder speaks: {text}\n\n"
@@ -92,19 +92,19 @@ KNOWLEDGE_KEY   = "mind:knowledge"
 HARVESTED_KEY   = "guidance:harvested"   # SET of corpus keys already ingested
 SPARK_LOG_KEY   = "guidance:spark:log"   # LIST of recent sparks
 
-# ── Background task handles ────────────────────────────────────────────────────
+# ΓöÇΓöÇ Background task handles ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 _harvester_task: asyncio.Task | None = None
 _harvester_stop: asyncio.Event = asyncio.Event()
 
 
-# ── Knowledge harvester ────────────────────────────────────────────────────────
+# ΓöÇΓöÇ Knowledge harvester ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 # Runs in the background. Polls guidance:corpus every 10s.
 # For each article not yet in guidance:harvested:
 #   - writes a knowledge entry into mind:knowledge
 #   - publishes ENGINE_EXTERNALIZE so the VR world spawns a node
 
 async def _run_harvester() -> None:
-    """Background loop: corpus → knowledge → VR."""
+    """Background loop: corpus ΓåÆ knowledge ΓåÆ VR."""
     log.info("[HARVESTER] started")
     bus = get_event_bus()
 
@@ -120,40 +120,39 @@ async def _run_harvester() -> None:
                 for key in new_keys:
                     try:
                         entry = json.loads(corpus[key])
-                        title   = entry.get("title", key)[:120]
-                        content = entry.get("content", "")
+                        content = entry.get("content", "") or entry.get("text", "")
                         source  = entry.get("source", "")
 
-                        # Build a compact summary for resonance scoring
-                        # First 300 chars of content make a good summary
-                        summary = content[:300].replace("\n", " ").strip()
+                        if not content.strip():
+                            await r.sadd(HARVESTED_KEY, key)
+                            continue
 
-                        # Write into mind:knowledge  (field = title, value = JSON)
+                        # Raw absorption — no imposed structure.
+                        # The brain absorbs text. Guidance patterns are the only categorizer.
+                        import hashlib as _hl
+                        _mk_key = _hl.sha256(content[:500].encode()).hexdigest()[:20]
                         knowledge_entry = json.dumps({
-                            "title":   title,
-                            "summary": summary,
-                            "content": content[:2000],
-                            "source":  source,
-                            "ts":      datetime.now(timezone.utc).isoformat(),
-                            "origin":  "guidance_spawn",
+                            "text":   content[:6000],
+                            "source": source,
+                            "ts":     datetime.now(timezone.utc).isoformat(),
                         })
-                        await r.hset(KNOWLEDGE_KEY, title, knowledge_entry)
+                        await r.hset(KNOWLEDGE_KEY, _mk_key, knowledge_entry)
 
                         # Mark as harvested
                         await r.sadd(HARVESTED_KEY, key)
 
-                        # Publish ENGINE_EXTERNALIZE → VR spawns a glowing node
+                        # Publish ENGINE_EXTERNALIZE → VR spawns a node
                         await bus.publish(YEvent(
                             event_type=YEventType.ENGINE_EXTERNALIZE,
                             source_service="guidance_spawn",
                             payload={
-                                "candidate_mind_name": title[:40],
+                                "candidate_mind_name": source[:40] or key[:40],
                                 "source": source[:100],
-                                "summary": summary[:120],
+                                "summary": content[:120],
                             }
                         ))
 
-                        log.info("[HARVESTER] mind:knowledge ← %s", title[:60])
+                        log.info("[HARVESTER] mind:knowledge ← %s", source[:60] or key[:40])
 
                     except Exception as exc:
                         log.warning("[HARVESTER] failed on key %s: %s", key, exc)
@@ -182,7 +181,7 @@ def _ensure_harvester_running() -> None:
         log.info("[HARVESTER] spawned new task")
 
 
-# ── Routes ─────────────────────────────────────────────────────────────────────
+# ΓöÇΓöÇ Routes ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class SparkRequest(BaseModel):
     text: str
@@ -205,13 +204,13 @@ async def spark_guidance(req: SparkRequest):
 
     r = aioredis.from_url(REDIS_URL, decode_responses=True)
     try:
-        # ── 1. The mind receives and responds ────────────────────────────────
+        # ΓöÇΓöÇ 1. The mind receives and responds ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         mind_response = await _mind_receive(spark_text, r)
         idea_name     = spark_text[:60]
 
-        log.info("[SPARK] founder spoke — mind responded (%d chars)", len(mind_response))
+        log.info("[SPARK] founder spoke ΓÇö mind responded (%d chars)", len(mind_response))
 
-        # ── 2. Founder's words → mind:knowledge (always — source radiates) ──
+        # ΓöÇΓöÇ 2. Founder's words ΓåÆ mind:knowledge (always ΓÇö source radiates) ΓöÇΓöÇ
         spark_title = idea_name[:80]
         knowledge_entry = json.dumps({
             "title":    spark_title,
@@ -224,7 +223,7 @@ async def spark_guidance(req: SparkRequest):
         })
         await r.hset(KNOWLEDGE_KEY, spark_title, knowledge_entry)
 
-        # ── 3. Idea embryo / boost in mind:ideas ───────────────────────────
+        # ΓöÇΓöÇ 3. Idea embryo / boost in mind:ideas ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         idea_id = re.sub(r'[^a-z0-9]+', '-', spark_title.lower())[:40].strip('-')
         existing_raw = await r.hget("mind:ideas", idea_id)
 
@@ -258,7 +257,7 @@ async def spark_guidance(req: SparkRequest):
             except Exception:
                 pass
 
-        # ── 4. ENGINE_EXTERNALIZE → VR planet appears / pulses ─────────────
+        # ΓöÇΓöÇ 4. ENGINE_EXTERNALIZE ΓåÆ VR planet appears / pulses ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         await bus.publish(YEvent(
             event_type=YEventType.ENGINE_EXTERNALIZE,
             source_service="founder_spark",
@@ -271,7 +270,7 @@ async def spark_guidance(req: SparkRequest):
             }
         ))
 
-        # ── 5. Mind's response → REFLECTION_COMPLETED (shown in VR) ────────
+        # ΓöÇΓöÇ 5. Mind's response ΓåÆ REFLECTION_COMPLETED (shown in VR) ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         if mind_response:
             await bus.publish(YEvent(
                 event_type=YEventType.REFLECTION_COMPLETED,
@@ -279,7 +278,7 @@ async def spark_guidance(req: SparkRequest):
                 payload={"guidance_text": mind_response}
             ))
 
-        # ── 6. Log the spark ────────────────────────────────────────────────
+        # ΓöÇΓöÇ 6. Log the spark ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
         spark_record = json.dumps({
             "text":     spark_text[:200],
             "response": mind_response[:200],
@@ -328,7 +327,7 @@ async def spark_status():
 
 @router.get("/guidance/spark/log")
 async def spark_log(limit: int = 20):
-    """Recent sparks — guidance given and mind's free-form responses."""
+    """Recent sparks ΓÇö guidance given and mind's free-form responses."""
     r = aioredis.from_url(REDIS_URL, decode_responses=True)
     try:
         raw = await r.lrange(SPARK_LOG_KEY, 0, limit - 1)

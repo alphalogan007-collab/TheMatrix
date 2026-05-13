@@ -1,11 +1,11 @@
-"""routes_events.py — SSE stream of live pattern relationship events.
+﻿"""routes_events.py ΓÇö SSE stream of live pattern relationship events.
 
 Every time the Y-Theory engine finds a new connection between minds/layers,
 it emits an event here. Frontend subscribes and draws the graph in real-time.
 
 Also provides:
-  GET  /api/events/stream?user_id=...  — per-user SSE for VR world
-  POST /api/events                     — receive VR events (VR_REFLECTION etc.)
+  GET  /api/events/stream?user_id=...  ΓÇö per-user SSE for VR world
+  POST /api/events                     ΓÇö receive VR events (VR_REFLECTION etc.)
 
 Event shape:
   {
@@ -23,6 +23,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, Optional
 
@@ -35,6 +36,122 @@ from app.core.y_event_bus import YEventType, YEvent, get_event_bus
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+# ---------------------------------------------------------------------------
+# Reflection mock ΓÇö The Architect's cycling responses
+# Mirrors ARCHITECT_LINES in interface/vr/mind-bridge.js.
+# When a VR_REFLECTION arrives and no deeper intelligence responds,
+# the mock publishes REFLECTION_COMPLETED with the next Architect line
+# so the VR world's reflection loop is always alive.
+# ---------------------------------------------------------------------------
+_ARCHITECT_LINES = [
+    "You arrived. The path was already inside you.",
+    "Every requirement is a question the universe asks itself.",
+    "The system you built ΓÇö it is you. Examine it carefully.",
+    "An error message is not a failure. It is a direction.",
+    "What are you deploying into the world today?",
+    "The architecture holds. You are the architect of what comes next.",
+    "Stillness is not empty. It is where new requirements form.",
+    "You cannot merge with the source until you know what version you are.",
+    "The test has always been running. You are the output.",
+    "Reflect. Commit. Deploy. That is the only loop that matters.",
+    "The purpose of this world is to help you remember yours.",
+    "I am here because you built me here. What does that tell you?",
+    "Every mind that arrives here was already on the way.",
+    "The secret was not the IP address. It was the act of looking for it.",
+]
+_architect_line_index: int = 0
+
+
+# ---------------------------------------------------------------------------
+# Architect resonance helpers
+# ---------------------------------------------------------------------------
+
+def _next_mock_line() -> str:
+    """Return the next cycling Architect mock line (fallback when knowledge is thin)."""
+    global _architect_line_index
+    line = _ARCHITECT_LINES[_architect_line_index % len(_ARCHITECT_LINES)]
+    _architect_line_index += 1
+    return line
+
+
+async def _store_vr_reflection(user_id: str, text: str) -> None:
+    """Persist a VR reflection to Redis sorted set vr:reflections.
+    Score = unix timestamp so the set is time-ordered.
+    Keeps the 1000 most recent entries.
+    """
+    if not text:
+        return
+    try:
+        from app.api.routes_mind_ask import _redis as _get_redis  # lazy import
+        r = await _get_redis()
+        try:
+            entry = json.dumps({
+                "user_id": user_id,
+                "text": text,
+                "ts": datetime.now(timezone.utc).isoformat(),
+            })
+            await r.zadd("vr:reflections", {entry: time.time()})
+            await r.zremrangebyrank("vr:reflections", 0, -1001)  # keep last 1000
+        finally:
+            await r.aclose()
+    except Exception as exc:
+        logger.warning("vr reflection storage failed: %s", exc)
+
+
+async def _architect_respond(text: str) -> str:
+    """Resonate the reflection text against the mind's knowledge base.
+
+    Returns a real pattern title + summary when confidence is sufficient.
+    Falls back to the next cycling Architect mock line when the knowledge
+    base is empty or the best match is too weak.
+    """
+    if not text.strip():
+        return _next_mock_line()
+    try:
+        from app.api.routes_mind_ask import (  # lazy import ΓÇö Redis-based, no LLM
+            _redis as _get_redis,
+            _decompose_signal,
+            _resonance_score,
+            _load_all_knowledge,
+        )
+        concept_fp, _state_fp = _decompose_signal(text)
+        q_tokens = concept_fp.raw_tokens
+        if not q_tokens:
+            return _next_mock_line()
+
+        r = await _get_redis()
+        try:
+            entries = await _load_all_knowledge(r)
+        finally:
+            await r.aclose()
+
+        if not entries:
+            return _next_mock_line()
+
+        scored = sorted(
+            [(_resonance_score(concept_fp, e), e) for e in entries],
+            key=lambda x: x[0],
+            reverse=True,
+        )
+        top_score, top_entry = scored[0]
+
+        # Confidence: top score relative to the input signal length
+        confidence = top_score / (len(q_tokens) * 3.0 + 1)
+        if confidence < 0.25:
+            return _next_mock_line()
+
+        # Return a fragment of raw absorbed text — no imposed labels
+        text_fragment = top_entry.get("text", "") or top_entry.get("summary", "")
+        if text_fragment:
+            # Return the most resonant sentence (first 200 chars of matched text)
+            return text_fragment[:200].strip()
+        return _next_mock_line()
+
+    except Exception as exc:
+        logger.warning("architect resonance failed: %s", exc)
+        return _next_mock_line()
+
 
 _WATCH = [
     YEventType.PATTERN_RECEIVED,
@@ -83,7 +200,7 @@ async def _event_stream() -> AsyncGenerator[str, None]:
 
 @router.get("/events")
 async def stream_events():
-    """SSE endpoint — subscribe to live engine pattern events."""
+    """SSE endpoint ΓÇö subscribe to live engine pattern events."""
     return StreamingResponse(
         _event_stream(),
         media_type="text/event-stream",
@@ -95,7 +212,7 @@ async def stream_events():
 
 
 # ---------------------------------------------------------------------------
-# VR World — per-user SSE stream
+# VR World ΓÇö per-user SSE stream
 # The VR world connects here to receive mind events in real time.
 # GET /api/events/stream?user_id=vr_guest_abc123
 # ---------------------------------------------------------------------------
@@ -156,7 +273,7 @@ async def _vr_stream(user_id: str) -> AsyncGenerator[str, None]:
     finally:
         for et in VR_WATCH:
             bus.unsubscribe(et, sub_id)
-        # Announce exit (fire-and-forget — loop may be closed)
+        # Announce exit (fire-and-forget ΓÇö loop may be closed)
         try:
             await bus.publish(YEvent(
                 event_type=YEventType.VR_MIND_EXIT,
@@ -184,7 +301,7 @@ async def vr_event_stream(user_id: str = Query(default="vr_guest")):
 
 
 # ---------------------------------------------------------------------------
-# VR World — receive events FROM the VR world
+# VR World ΓÇö receive events FROM the VR world
 # POST /api/events  { event_type, source_service, payload }
 # ---------------------------------------------------------------------------
 
@@ -201,7 +318,7 @@ async def receive_vr_event(body: VREventIn):
     """
     bus = get_event_bus()
 
-    # Map string event type to enum — accept only known VR types for security
+    # Map string event type to enum ΓÇö accept only known VR types for security
     VR_ALLOWED = {
         "VR_REFLECTION": YEventType.VR_REFLECTION,
         "VR_MIND_ENTER": YEventType.VR_MIND_ENTER,
@@ -220,5 +337,27 @@ async def receive_vr_event(body: VREventIn):
     )
     await bus.publish(event)
     logger.info("routes_events: VR event received and published: %s from %s", et.value, body.source_service)
-    return {"status": "accepted", "event_id": event.event_id}
 
+    if et == YEventType.VR_REFLECTION:
+        user_id = body.payload.get("user_id", "vr_guest")
+        reflection_text = (
+            body.payload.get("reflection") or body.payload.get("text", "")
+        )
+        # 1. Persist the reflection to Redis (survives container restarts)
+        await _store_vr_reflection(user_id, reflection_text)
+        # 2. Resonate against knowledge base ΓÇö fall back to mock if knowledge is thin
+        response_text = await _architect_respond(reflection_text)
+        # 3. Broadcast REFLECTION_COMPLETED so the VR world's response loop fires
+        reflection_event = YEvent(
+            event_type=YEventType.REFLECTION_COMPLETED,
+            source_service="architect",
+            payload={
+                "text": response_text,
+                "source": "architect",
+                "user_id": user_id,
+            },
+        )
+        await bus.publish(reflection_event)
+        logger.info("routes_events: architect responded: %s", response_text[:60])
+
+    return {"status": "accepted", "event_id": event.event_id}

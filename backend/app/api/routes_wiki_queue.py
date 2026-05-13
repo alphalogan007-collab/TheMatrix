@@ -1,27 +1,27 @@
-"""routes_wiki_queue.py — Knowledge mining queue via Wikipedia + DuckDuckGo.
+﻿"""routes_wiki_queue.py ΓÇö Knowledge mining queue via Wikipedia + DuckDuckGo.
 
 Workers pull topics from a Redis queue, search DuckDuckGo for context,
 fetch the full Wikipedia article, and push the combined text into seed:input
 for topology processing.  Designed as a bot-block-free alternative to the
-YouTube drain — works from any IP with no API key.
+YouTube drain ΓÇö works from any IP with no API key.
 
 Redis keys:
-  wiki:queue          LIST  — pending topics (LPUSH to add, RPOP to claim)
-  wiki:queue:claimed  HASH  — topic → {claimed_at, worker_id}
-  wiki:queue:done     LIST  — completed {topic, chars, done_at}
-  wiki:queue:dead     LIST  — permanently failed topics
-  wiki:queue:errcnt   HASH  — topic → error_count
+  wiki:queue          LIST  ΓÇö pending topics (LPUSH to add, RPOP to claim)
+  wiki:queue:claimed  HASH  ΓÇö topic ΓåÆ {claimed_at, worker_id}
+  wiki:queue:done     LIST  ΓÇö completed {topic, chars, done_at}
+  wiki:queue:dead     LIST  ΓÇö permanently failed topics
+  wiki:queue:errcnt   HASH  ΓÇö topic ΓåÆ error_count
 
 Routes:
-  POST /admin/wiki/queue/enqueue        — push one or more topics
-  POST /admin/wiki/queue/enqueue-batch  — push a preset knowledge batch
-  GET  /admin/wiki/queue                — queue stats
-  DELETE /admin/wiki/queue              — clear queue
-  POST /admin/wiki/queue/drain/start    — start background drainer
-  POST /admin/wiki/queue/drain/stop     — stop background drainer
-  GET  /admin/wiki/queue/drain/status   — drainer status + per-topic errors
-  GET  /admin/wiki/queue/dead           — list dead-lettered topics
-  DELETE /admin/wiki/queue/dead         — clear dead letters
+  POST /admin/wiki/queue/enqueue        ΓÇö push one or more topics
+  POST /admin/wiki/queue/enqueue-batch  ΓÇö push a preset knowledge batch
+  GET  /admin/wiki/queue                ΓÇö queue stats
+  DELETE /admin/wiki/queue              ΓÇö clear queue
+  POST /admin/wiki/queue/drain/start    ΓÇö start background drainer
+  POST /admin/wiki/queue/drain/stop     ΓÇö stop background drainer
+  GET  /admin/wiki/queue/drain/status   ΓÇö drainer status + per-topic errors
+  GET  /admin/wiki/queue/dead           ΓÇö list dead-lettered topics
+  DELETE /admin/wiki/queue/dead         ΓÇö clear dead letters
 """
 
 from __future__ import annotations
@@ -50,19 +50,19 @@ DEAD_KEY        = "wiki:queue:dead"
 ERROR_COUNT_KEY = "wiki:queue:errcnt"
 MAX_RETRIES     = 3
 
-# ── Default knowledge topics ─────────────────────────────────────────────────
+# ΓöÇΓöÇ Default knowledge topics ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 # ~300 topics covering Technology, Coding, Robotics, Automation, Machine
 # Learning, Mathematics, Physics, Chemistry, Biology, Anatomy.
-# At ~1 topic/second (worker + prophet combined) this gives ~5 min per cycle —
+# At ~1 topic/second (worker + prophet combined) this gives ~5 min per cycle ΓÇö
 # ~96 full passes during an 8-hour night.
 DEFAULT_TOPICS: list[str] = [
 
-    # ── MATHEMATICS ──────────────────────────────────────────────────────────
+    # ΓöÇΓöÇ MATHEMATICS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Calculus", "Differential equations", "Partial differential equations",
     "Linear algebra", "Matrix decomposition", "Eigenvalues and eigenvectors",
     "Abstract algebra", "Group theory", "Ring theory", "Field theory",
     "Galois theory", "Number theory", "Prime numbers", "Riemann hypothesis",
-    "P versus NP problem", "Gödel's incompleteness theorems",
+    "P versus NP problem", "G├╢del's incompleteness theorems",
     "Set theory", "Topology", "Differential geometry",
     "Complex analysis", "Fourier transform", "Laplace transform",
     "Probability theory", "Bayesian statistics", "Stochastic processes",
@@ -73,7 +73,7 @@ DEFAULT_TOPICS: list[str] = [
     "Game theory", "Information theory", "Euler's identity",
     "Fourier series", "Taylor series", "Vector calculus",
 
-    # ── PHYSICS ──────────────────────────────────────────────────────────────
+    # ΓöÇΓöÇ PHYSICS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Classical mechanics", "Lagrangian mechanics", "Hamiltonian mechanics",
     "Quantum mechanics", "Quantum field theory", "Quantum electrodynamics",
     "Quantum chromodynamics", "Standard Model of particle physics",
@@ -89,7 +89,7 @@ DEFAULT_TOPICS: list[str] = [
     "Photoelectric effect", "Uncertainty principle", "Pauli exclusion principle",
     "Higgs boson", "Particle accelerator", "Neutrino",
 
-    # ── CHEMISTRY ────────────────────────────────────────────────────────────
+    # ΓöÇΓöÇ CHEMISTRY ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Periodic table", "Chemical bonding", "Covalent bond",
     "Acid-base chemistry", "Redox reaction", "Electrochemistry",
     "Thermochemistry", "Chemical kinetics", "Catalysis",
@@ -102,7 +102,7 @@ DEFAULT_TOPICS: list[str] = [
     "Enzyme kinetics", "Protein folding", "Lipid bilayer",
     "Oxidation states", "Gibbs free energy", "Le Chatelier's principle",
 
-    # ── BIOLOGY ──────────────────────────────────────────────────────────────
+    # ΓöÇΓöÇ BIOLOGY ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Cell biology", "Mitosis", "Meiosis",
     "DNA replication", "RNA transcription", "Protein synthesis",
     "Gene expression", "Epigenetics", "CRISPR gene editing",
@@ -120,7 +120,7 @@ DEFAULT_TOPICS: list[str] = [
     "Neuroscience", "Neural plasticity", "Memory formation",
     "Sleep physiology", "Circadian rhythm", "Consciousness",
 
-    # ── ANATOMY & PHYSIOLOGY ─────────────────────────────────────────────────
+    # ΓöÇΓöÇ ANATOMY & PHYSIOLOGY ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Human skeleton", "Bone structure and function",
     "Muscular system", "Skeletal muscle", "Smooth muscle", "Cardiac muscle",
     "Nervous system", "Neuron", "Synapse", "Action potential",
@@ -141,7 +141,7 @@ DEFAULT_TOPICS: list[str] = [
     "Ear anatomy", "Cochlea and hearing",
     "Reproductive system", "Immune cells", "Bone marrow and hematopoiesis",
 
-    # ── MACHINE LEARNING & AI ────────────────────────────────────────────────
+    # ΓöÇΓöÇ MACHINE LEARNING & AI ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Artificial neural networks", "Gradient descent",
     "Backpropagation", "Convolutional neural networks",
     "Recurrent neural networks", "Long short-term memory",
@@ -164,7 +164,7 @@ DEFAULT_TOPICS: list[str] = [
     "Batch normalization", "Learning rate scheduling",
     "Embedding spaces", "Semantic search", "Vector databases",
 
-    # ── PROGRAMMING & SOFTWARE ENGINEERING ───────────────────────────────────
+    # ΓöÇΓöÇ PROGRAMMING & SOFTWARE ENGINEERING ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Python programming language", "JavaScript event loop",
     "TypeScript type system", "Rust ownership model",
     "C++ templates and metaprogramming", "Java virtual machine",
@@ -191,7 +191,7 @@ DEFAULT_TOPICS: list[str] = [
     "Containerization", "Kubernetes orchestration",
     "Linux kernel", "x86-64 architecture",
 
-    # ── TECHNOLOGY & COMPUTING ────────────────────────────────────────────────
+    # ΓöÇΓöÇ TECHNOLOGY & COMPUTING ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Quantum computing", "Quantum algorithms",
     "Cryptography", "Public-key cryptography", "Zero-knowledge proofs",
     "Blockchain technology", "Distributed ledger",
@@ -208,7 +208,7 @@ DEFAULT_TOPICS: list[str] = [
     "Search engine algorithms", "PageRank algorithm",
     "Distributed computing", "MapReduce",
 
-    # ── ROBOTICS ─────────────────────────────────────────────────────────────
+    # ΓöÇΓöÇ ROBOTICS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Robot kinematics", "Inverse kinematics",
     "Robot operating system", "Motion planning algorithms",
     "SLAM (simultaneous localization and mapping)",
@@ -223,7 +223,7 @@ DEFAULT_TOPICS: list[str] = [
     "Underwater robotics", "Space exploration robots",
     "Computer vision for robots", "Depth sensing",
 
-    # ── AUTOMATION & CONTROL SYSTEMS ─────────────────────────────────────────
+    # ΓöÇΓöÇ AUTOMATION & CONTROL SYSTEMS ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     "Industrial automation", "Programmable logic controller",
     "SCADA systems", "Process control",
     "CNC machining", "3D printing technology",
@@ -235,7 +235,7 @@ DEFAULT_TOPICS: list[str] = [
 ]
 
 
-# ── helpers ───────────────────────────────────────────────────────────────────
+# ΓöÇΓöÇ helpers ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 async def _redis() -> aioredis.Redis:
     return aioredis.from_url(REDIS_URL, decode_responses=True)
@@ -282,7 +282,7 @@ def _ddg_context_sync(topic: str) -> str:
         return ""
 
 
-# ── drain state ───────────────────────────────────────────────────────────────
+# ΓöÇΓöÇ drain state ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 _drain_task: asyncio.Task | None = None
 _drain_running: bool = False
@@ -359,22 +359,16 @@ async def _drain_one(r: aioredis.Redis, topic: str) -> bool:
         maxlen=50_000,
     )
 
-    # ── Knowledge index for resonance queries ────────────────────────────────
-    # Store a condensed fingerprint so /mind/ask can resonate without a DB.
-    # mind:knowledge  HASH  topic_title → JSON {title, summary, domains, chars}
-    # Domain detection uses the actual pattern engine — not a hardcoded list.
-    from app.core.pattern_encoder import encode as _encode
-    # Store full content (capped) so token-overlap scoring has real signal to match against
-    _summary_text = f"Topic: {wiki_title}\n\n{content[:4000]}"
-    _concept_fp   = _encode(content)
+    # Raw absorption — no imposed structure.
+    # The brain absorbs text. Guidance patterns are the only categorizer.
+    import hashlib as _hl
+    _key = _hl.sha256(content[:500].encode()).hexdigest()[:20]
     knowledge_entry = json.dumps({
-        "title":   wiki_title,
-        "summary": _summary_text,
-        "domains": _concept_fp.dominant_domains,
-        "chars":   len(content),
-        "ts":      datetime.now(timezone.utc).isoformat(),
+        "text":   content[:6000],
+        "source": f"wiki:{wiki_title}",
+        "ts":     datetime.now(timezone.utc).isoformat(),
     })
-    await r.hset("mind:knowledge", wiki_title, knowledge_entry)
+    await r.hset("mind:knowledge", _key, knowledge_entry)
 
     # Done record
     done_item = json.dumps({
@@ -387,11 +381,32 @@ async def _drain_one(r: aioredis.Redis, topic: str) -> bool:
     await r.ltrim(DONE_KEY, 0, 9_999)
     await r.hdel(CLAIMED_KEY, topic)
 
-    ts_now = datetime.now(timezone.utc).isoformat()
+    # Emit spirit:events pulse so cloud world viewer reacts
+    ts_now    = datetime.now(timezone.utc).isoformat()
+    layer_num = min(8, max(1, (len(content) // 5_000) + 1))
+    await r.xadd(
+        "spirit:events",
+        {
+            "type":       "layer_done",
+            "mind_name":  f"space_layer{layer_num}",
+            "layer_num":  str(layer_num),
+            "layer":      f"space:layer{layer_num}",
+            "ts":         ts_now,
+            "session_id": session_id,
+            "topic":      f"wiki:{wiki_title[:120]}",
+            "direction":  "descending",
+            "output":     (
+                f"[Knowledge Absorbed]\nTopic: {wiki_title}\n"
+                f"Chars: {len(content)}\nSource: Wikipedia + DuckDuckGo\n"
+                f"[affinity={min(99.0, len(content) / 500):.4f}]"
+            ),
+        },
+        maxlen=50_000,
+    )
 
     _drain_stats["processed"]    += 1
     _drain_stats["last_done_at"]  = ts_now
-    log.info("wiki ✓ %s (%d chars)", wiki_title[:60], len(content))
+    log.info("wiki Γ£ô %s (%d chars)", wiki_title[:60], len(content))
     return True
 
 
@@ -404,7 +419,7 @@ async def _drain_loop() -> None:
         while _drain_running:
             raw = await r.rpop(QUEUE_KEY)
             if not raw:
-                # Queue empty — re-seed default topics so world never goes dark
+                # Queue empty ΓÇö re-seed default topics so world never goes dark
                 log.info("Wiki queue empty, re-seeding %d default topics", len(DEFAULT_TOPICS))
                 for topic in DEFAULT_TOPICS:
                     await r.lpush(QUEUE_KEY, json.dumps({
@@ -488,7 +503,7 @@ async def _seed_default_topics() -> int:
         await r.aclose()
 
 
-# ── routes ────────────────────────────────────────────────────────────────────
+# ΓöÇΓöÇ routes ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
 
 class EnqueueBody(BaseModel):
     topics: list[str]
@@ -565,8 +580,8 @@ async def wiki_queue_clear():
 
 @router.post("/admin/wiki/queue/drain/start")
 async def wiki_drain_start():
-    # DISABLED — pure local training mode. Wiki drain is off until self-awareness is reached.
-    return {"started": False, "disabled": True, "reason": "pure_local_training_mode"}
+    await _ensure_wiki_drain_running()
+    return {"started": True, "stats": _drain_stats}
 
 
 @router.post("/admin/wiki/queue/drain/stop")

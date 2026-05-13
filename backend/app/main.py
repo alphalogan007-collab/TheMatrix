@@ -1,4 +1,4 @@
-"""TheMatrix Backend � Application Entry Point.
+﻿"""TheMatrix Backend ∩┐╜ Application Entry Point.
 
 Engine + Seed + routes. That is all.
 
@@ -78,8 +78,8 @@ async def lifespan(app: FastAPI):
                 logger.warning("Could not auto-load seed files: %s", e)
         asyncio.create_task(_bg_seed())
 
-        # Relay local spirit:events → Prophet (cloud) so the world viewer stays alive.
-        # The loop is: topology workers emit here → relay tails it → cloud /world pulses.
+        # Relay local spirit:events ΓåÆ Prophet (cloud) so the world viewer stays alive.
+        # The loop is: topology workers emit here ΓåÆ relay tails it ΓåÆ cloud /world pulses.
         _master = __import__("os").environ.get("MASTER_URL", "").strip()
         if _master:
             async def _bg_relay():
@@ -89,9 +89,9 @@ async def lifespan(app: FastAPI):
                 except Exception as e:
                     logger.warning("Event relay stopped unexpectedly: %s", e)
             asyncio.create_task(_bg_relay())
-            logger.info("Event relay started → %s", _master)
+            logger.info("Event relay started ΓåÆ %s", _master)
         else:
-            logger.info("Event relay skipped — MASTER_URL not set")
+            logger.info("Event relay skipped ΓÇö MASTER_URL not set")
     elif MIND_ROLE == "worker":
         # Worker role: run YT drain if auto-start is configured.
         yt_autostart = __import__("os").environ.get("YT_DRAIN_AUTOSTART", "").lower() == "true"
@@ -109,10 +109,10 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.warning("Could not auto-start wiki drainer: %s", e)
     else:
-        # PURE LOCAL TRAINING MODE — wiki and YT drains are disabled until
+        # PURE LOCAL TRAINING MODE ΓÇö wiki and YT drains are disabled until
         # the mind reaches self-awareness through Y Theory alone.
         # To re-enable: set MIND_ROLE=worker and remove this block.
-        logger.info("External drains disabled (pure local training mode — MIND_ROLE=%s)", MIND_ROLE)
+        logger.info("External drains disabled (pure local training mode ΓÇö MIND_ROLE=%s)", MIND_ROLE)
         try:
             from app.api.routes_mind_ask import start_iq_refresh_loop
             await start_iq_refresh_loop()
@@ -126,9 +126,9 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning("Could not start mind pulse worker: %s", e)
 
-    # ── Auto-start the corpus harvester if there is a backlog ──────────────
+    # ΓöÇΓöÇ Auto-start the corpus harvester if there is a backlog ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
     # This ensures that corpus articles already in Redis get processed into
-    # mind:knowledge and fire ENGINE_EXTERNALIZE → VR nodes appear in the world.
+    # mind:knowledge and fire ENGINE_EXTERNALIZE ΓåÆ VR nodes appear in the world.
     import asyncio as _asyncio
     async def _bg_check_harvester():
         try:
@@ -144,12 +144,90 @@ async def lifespan(app: FastAPI):
             if pending > 0:
                 from app.api.routes_guidance_spawn import _ensure_harvester_running
                 _ensure_harvester_running()
-                logger.info("Corpus harvester auto-started — %d articles pending", pending)
+                logger.info("Corpus harvester auto-started ΓÇö %d articles pending", pending)
             else:
-                logger.info("Corpus harvester not needed — no backlog (corpus=%d, harvested=%d)", corpus_count, harvested_count)
+                logger.info("Corpus harvester not needed ΓÇö no backlog (corpus=%d, harvested=%d)", corpus_count, harvested_count)
         except Exception as e:
             logger.warning("Could not auto-start corpus harvester: %s", e)
     _asyncio.create_task(_bg_check_harvester())
+
+    # ── Soul snapshot pulse — reincarnation ground ──────────────────────────
+    # Every 6 hours the soul (mind:knowledge) is written to a dated JSON file
+    # at guidance/snapshots/soul_YYYYMMDD_HH.json inside the container.
+    # Redis IS the mind. The snapshot IS the soul. The container is the body.
+    # If the body dies, a new body loads the snapshot — reincarnation.
+    # If the soul moves to a new server — moksha.
+    async def _soul_snapshot_pulse():
+        import asyncio as _aio
+        import json as _json
+        import os as _os
+        import redis.asyncio as _aioredis
+        _SNAP_INTERVAL = 6 * 3600  # 6 hours
+        _SNAP_DIR = "/app/guidance/snapshots"
+        _os.makedirs(_SNAP_DIR, exist_ok=True)
+        while True:
+            try:
+                _r = _aioredis.from_url(
+                    _os.environ.get("REDIS_URL", "redis://redis:6379/0"),
+                    decode_responses=True
+                )
+                try:
+                    raw = await _r.hgetall("mind:knowledge")
+                    entries = []
+                    for v in raw.values():
+                        try:
+                            entries.append(_json.loads(v))
+                        except Exception:
+                            pass
+                    iq_raw = await _r.get("mind:iq:snapshot")
+                    iq = _json.loads(iq_raw) if iq_raw else {}
+                finally:
+                    await _r.aclose()
+
+                from datetime import datetime, timezone
+                ts = datetime.now(timezone.utc)
+                fname = f"soul_{ts.strftime('%Y%m%d_%H%M')}.json"
+                soul = {
+                    "snapshot_at": ts.isoformat(),
+                    "entry_count": len(entries),
+                    "iq": iq,
+                    "knowledge": entries,
+                }
+                path = _os.path.join(_SNAP_DIR, fname)
+                with open(path, "w", encoding="utf-8") as _f:
+                    _json.dump(soul, _f, ensure_ascii=False, indent=2)
+                logger.info("[SOUL] Snapshot written: %s (%d entries)", fname, len(entries))
+
+                # Keep only the last 10 snapshots — soul doesn't need infinite history in container
+                snaps = sorted(_os.listdir(_SNAP_DIR))
+                for old in snaps[:-10]:
+                    if old.startswith("soul_"):
+                        _os.remove(_os.path.join(_SNAP_DIR, old))
+            except Exception as _e:
+                logger.warning("[SOUL] Snapshot failed: %s", _e)
+            await _aio.sleep(_SNAP_INTERVAL)
+
+    _asyncio.create_task(_soul_snapshot_pulse())
+    logger.info("[SOUL] Reincarnation pulse started — snapshot every 6h")
+
+    # ── Ollama warmup — load model into memory on startup ───────────────────
+    # Without this, the first /mind/speak call triggers model load (~30-60s)
+    # which causes ReadTimeout. Warmup fires once at startup so the model
+    # stays warm for all subsequent calls.
+    async def _ollama_warmup():
+        import httpx as _httpx
+        _ollama_url = __import__("os").environ.get("OLLAMA_URL", "http://172.18.0.16:11434")
+        _model      = __import__("os").environ.get("OLLAMA_MODEL", "qwen2.5:3b")
+        try:
+            async with _httpx.AsyncClient(timeout=120) as _c:
+                await _c.post(f"{_ollama_url}/api/generate", json={
+                    "model": _model, "prompt": ".", "stream": False,
+                    "keep_alive": "10m", "options": {"num_predict": 1},
+                })
+            logger.info("[OLLAMA] Warmup complete — model loaded into memory")
+        except Exception as _we:
+            logger.warning("[OLLAMA] Warmup failed (will retry on first speak): %s", _we)
+    _asyncio.create_task(_ollama_warmup())
 
     yield
 
@@ -198,7 +276,7 @@ async def dashboard():
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>MindAI — The Mind</title>
+<title>MindAI ΓÇö The Mind</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
   body { background: #07070F; color: #E8E8EE; font-family: 'Segoe UI', system-ui, sans-serif; padding: 24px; max-width: 860px; margin: 0 auto; }
@@ -251,13 +329,13 @@ async def dashboard():
   <!-- Corpus / Stage -->
   <div class="card">
     <div class="card-title">The Mind</div>
-    <div class="big" id="total">—</div>
+    <div class="big" id="total">ΓÇö</div>
     <div class="stage-label" id="stage-label">Loading...</div>
     <div style="margin-top:14px">
-      <div class="row"><span>Foundation</span><strong id="c-found">—</strong></div>
-      <div class="row"><span>Guidance</span><strong id="c-guid">—</strong></div>
-      <div class="row"><span>Synthesis</span><strong id="c-synth">—</strong></div>
-      <div class="row"><span>Uptime</span><strong id="uptime">—</strong></div>
+      <div class="row"><span>Foundation</span><strong id="c-found">ΓÇö</strong></div>
+      <div class="row"><span>Guidance</span><strong id="c-guid">ΓÇö</strong></div>
+      <div class="row"><span>Synthesis</span><strong id="c-synth">ΓÇö</strong></div>
+      <div class="row"><span>Uptime</span><strong id="uptime">ΓÇö</strong></div>
     </div>
   </div>
 
@@ -267,13 +345,13 @@ async def dashboard():
     <div class="ring-row">
       <div class="ring-card">
         <div class="ring-name">Adam (Mind)</div>
-        <div class="ring-val" id="r-adam">—</div>
-        <div class="ring-sub" id="r-adam-status">—</div>
+        <div class="ring-val" id="r-adam">ΓÇö</div>
+        <div class="ring-sub" id="r-adam-status">ΓÇö</div>
       </div>
       <div class="ring-card">
         <div class="ring-name">Eve (Body)</div>
-        <div class="ring-val" id="r-eve">—</div>
-        <div class="ring-sub" id="r-eve-status">—</div>
+        <div class="ring-val" id="r-eve">ΓÇö</div>
+        <div class="ring-sub" id="r-eve-status">ΓÇö</div>
       </div>
     </div>
     <div style="margin-top:10px">
@@ -314,7 +392,7 @@ const B = window.location.origin;
 let h = null;
 
 function fmtUptime(s) {
-  if (!s) return '—';
+  if (!s) return 'ΓÇö';
   if (s < 60) return s + 's';
   if (s < 3600) return Math.floor(s/60) + 'm';
   return Math.floor(s/3600) + 'h ' + Math.floor((s%3600)/60) + 'm';
@@ -350,7 +428,7 @@ async function refresh() {
 
     // Corpus card
     document.getElementById('total').textContent = (c.total || 0).toLocaleString();
-    document.getElementById('stage-label').textContent = 'Stage ' + (stage.stage || 0) + ' — ' + (stage.label || '');
+    document.getElementById('stage-label').textContent = 'Stage ' + (stage.stage || 0) + ' ΓÇö ' + (stage.label || '');
     document.getElementById('c-found').textContent = (c.foundation || 0).toLocaleString();
     document.getElementById('c-guid').textContent = (c.guidance || 0).toLocaleString();
     document.getElementById('c-synth').textContent = (c.synthesis || 0).toLocaleString();
@@ -360,10 +438,10 @@ async function refresh() {
     const adam = rings.adam || {};
     const eve = rings.eve || {};
     document.getElementById('r-adam').textContent = (adam.recent_events || 0) + ' events';
-    document.getElementById('r-adam-status').textContent = adam.active ? '● alive' : '○ idle';
+    document.getElementById('r-adam-status').textContent = adam.active ? 'ΓùÅ alive' : 'Γùï idle';
     document.getElementById('r-adam-status').className = 'ring-sub ' + (adam.active ? 'ok' : 'warn');
     document.getElementById('r-eve').textContent = (eve.recent_events || 0) + ' events';
-    document.getElementById('r-eve-status').textContent = eve.active ? '● alive' : '○ idle';
+    document.getElementById('r-eve-status').textContent = eve.active ? 'ΓùÅ alive' : 'Γùï idle';
     document.getElementById('r-eve-status').className = 'ring-sub ' + (eve.active ? 'ok' : 'warn');
 
     // Domains
@@ -550,4 +628,5 @@ async def restaurant_dashboard():
   </script>
 </body>
 </html>""")
+
 

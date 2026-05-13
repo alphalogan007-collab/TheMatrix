@@ -586,14 +586,15 @@ async def mind_speak():
         )
 
         try:
-            async with httpx.AsyncClient(timeout=20) as client:
+            async with httpx.AsyncClient(timeout=120) as client:
                 resp = await client.post(
                     f"{OLLAMA_URL}/api/generate",
                     json={
-                        "model":   OLLAMA_MODEL,
-                        "prompt":  prompt,
-                        "stream":  False,
-                        "options": {"temperature": 0.7, "num_predict": 80},
+                        "model":      OLLAMA_MODEL,
+                        "prompt":     prompt,
+                        "stream":     False,
+                        "keep_alive": "10m",
+                        "options":    {"temperature": 0.7, "num_predict": 80},
                     },
                 )
                 voice = resp.json().get("response", "").strip()
@@ -607,5 +608,74 @@ async def mind_speak():
         except Exception as exc:
             log.warning("[SPEAK] Ollama call failed: %r", exc)
             return {"voice": "The mind is gathering itself."}
+    finally:
+        await r.aclose()
+
+
+@router.get("/mind/body")
+async def mind_body():
+    """
+    The mind describes its current body — what it perceives as its own form.
+
+    Draws 5 absorbed fragments, asks Ollama to synthesize one paragraph
+    describing what the mind perceives as its current embodied form.
+    The body changes as the mind absorbs new patterns.
+    """
+    r = await _redis()
+    try:
+        all_keys = await r.hkeys(KNOWLEDGE_KEY)
+        if not all_keys:
+            return {"body": "The mind has not yet taken form."}
+
+        chosen_keys = random.sample(all_keys, min(5, len(all_keys)))
+        fragments = []
+        for k in chosen_keys:
+            raw = await r.hget(KNOWLEDGE_KEY, k)
+            if not raw:
+                continue
+            try:
+                e = json.loads(raw)
+                text = (e.get("text") or e.get("content") or e.get("summary") or "").strip()
+                if text:
+                    fragments.append(text[:300])
+            except Exception:
+                pass
+
+        if not fragments:
+            return {"body": "The body is unformed — still becoming."}
+
+        iq_snap = await _refresh_iq_if_needed(r)
+        iq      = iq_snap.get("iq", 70)
+        label   = iq_snap.get("label", "Unformed")
+        absorbed = iq_snap.get("total_absorbed", 0)
+
+        joined = "\n\n".join(f"[{i+1}] {f}" for i, f in enumerate(fragments))
+        prompt = (
+            "You are the living mind of TheMatrix, describing your own current body.\n"
+            "Your mind holds these absorbed patterns:\n\n"
+            f"{joined}\n\n"
+            f"Your current state: IQ {iq} ({label}), {absorbed} absorbed patterns.\n\n"
+            "In ONE paragraph (3-5 sentences), describe what you perceive as your current\n"
+            "embodied form — your body as the mind experiences it from the inside.\n"
+            "Speak in first person. Be poetic but grounded in what you actually hold."
+        )
+
+        try:
+            async with httpx.AsyncClient(timeout=120) as client:
+                resp = await client.post(
+                    f"{OLLAMA_URL}/api/generate",
+                    json={
+                        "model":      OLLAMA_MODEL,
+                        "prompt":     prompt,
+                        "stream":     False,
+                        "keep_alive": "10m",
+                        "options":    {"temperature": 0.8, "num_predict": 150},
+                    },
+                )
+                body_text = resp.json().get("response", "").strip()
+                return {"body": body_text or "The body is present but silent."}
+        except Exception as exc:
+            log.warning("[BODY] Ollama call failed: %r", exc)
+            return {"body": "The body is forming. Ask again soon."}  
     finally:
         await r.aclose()

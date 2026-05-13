@@ -27,7 +27,7 @@ import time
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Dict, Optional
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Query, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -361,3 +361,115 @@ async def receive_vr_event(body: VREventIn):
         logger.info("routes_events: architect responded: %s", response_text[:60])
 
     return {"status": "accepted", "event_id": event.event_id}
+
+
+# ---------------------------------------------------------------------------
+# WebSocket /nerve — bidirectional VR-to-mind channel
+# The VR world connects here for full duplex: mind pushes events out,
+# VR sends reflections in.  Same subscriptions as the SSE stream but
+# over WebSocket so the device can also transmit.
+# ws://host/nerve?user_id=vr_guest_abc
+# ---------------------------------------------------------------------------
+
+@router.websocket("/nerve")
+async def vr_nerve(websocket: WebSocket, user_id: str = "vr_guest"):
+    """Bidirectional WebSocket between VR world and the mind.
+
+    OUT (mind → device): ENGINE_RESONATE, ENGINE_EXTERNALIZE, REFLECTION_COMPLETED, etc.
+    IN  (device → mind): VR_REFLECTION, VR_MIND_ENTER, VR_MIND_EXIT
+    """
+    await websocket.accept()
+
+    bus = get_event_bus()
+    vr_queue: asyncio.Queue = asyncio.Queue(maxsize=200)
+
+    VR_WATCH = [
+        YEventType.ENGINE_RESONATE,
+        YEventType.ENGINE_EXTERNALIZE,
+        YEventType.ENGINE_COLLAPSE,
+        YEventType.ENGINE_BRANCH,
+        YEventType.ENGINE_MERGE,
+        YEventType.REFLECTION_COMPLETED,
+        YEventType.PURPOSE_ACTIVATED,
+        YEventType.MORAL_RISK_DETECTED,
+        YEventType.VR_REFLECTION,
+        YEventType.VR_MIND_ENTER,
+        YEventType.VR_MIND_EXIT,
+    ]
+
+    sub_id = f"nerve_{user_id}"
+
+    async def _push(event: YEvent) -> None:
+        try:
+            vr_queue.put_nowait({
+                "event_type": event.event_type.value,
+                "source_service": event.source_service,
+                "payload": event.payload,
+                "timestamp": event.timestamp.isoformat(),
+            })
+        except asyncio.QueueFull:
+            pass
+
+    for et in VR_WATCH:
+        bus.subscribe(et, _push, subscriber_id=sub_id)
+
+    # Announce entry
+    await bus.publish(YEvent(
+        event_type=YEventType.VR_MIND_ENTER,
+        source_service="vr_world",
+        payload={"user_id": user_id},
+    ))
+
+    VR_ALLOWED = {
+        "VR_REFLECTION": YEventType.VR_REFLECTION,
+        "VR_MIND_ENTER": YEventType.VR_MIND_ENTER,
+        "VR_MIND_EXIT":  YEventType.VR_MIND_EXIT,
+    }
+
+    async def sender():
+        """Push mind events to VR device."""
+        while True:
+            try:
+                msg = await asyncio.wait_for(vr_queue.get(), timeout=20.0)
+                await websocket.send_json(msg)
+            except asyncio.TimeoutError:
+                await websocket.send_json({"event_type": "heartbeat"})
+
+    async def receiver():
+        """Receive VR events from device and publish onto bus."""
+        while True:
+            raw = await websocket.receive_json()
+            et_str = raw.get("event_type", "")
+            et = VR_ALLOWED.get(et_str)
+            if not et:
+                logger.warning("[NERVE] unknown event from VR: %s", et_str)
+                continue
+            payload = raw.get("payload", {})
+            payload.setdefault("user_id", user_id)
+            event = YEvent(event_type=et, source_service="vr_world", payload=payload)
+            await bus.publish(event)
+
+            if et == YEventType.VR_REFLECTION:
+                await _store_vr_reflection(user_id, payload.get("text", ""))
+                response_text = await _architect_respond(payload.get("text", ""))
+                await bus.publish(YEvent(
+                    event_type=YEventType.REFLECTION_COMPLETED,
+                    source_service="architect",
+                    payload={"text": response_text, "source": "architect", "user_id": user_id},
+                ))
+
+    try:
+        await asyncio.gather(sender(), receiver())
+    except (WebSocketDisconnect, Exception):
+        pass
+    finally:
+        for et in VR_WATCH:
+            bus.unsubscribe(et, sub_id)
+        try:
+            await bus.publish(YEvent(
+                event_type=YEventType.VR_MIND_EXIT,
+                source_service="vr_world",
+                payload={"user_id": user_id},
+            ))
+        except Exception:
+            pass

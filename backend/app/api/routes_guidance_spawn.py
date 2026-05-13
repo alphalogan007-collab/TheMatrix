@@ -36,8 +36,8 @@ from app.core.y_event_bus import YEventType, YEvent, get_event_bus
 
 log = logging.getLogger("guidance_spawn")
 
-OLLAMA_URL   = "http://matrix_ollama:11434"
-OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "llama3.2")
+OLLAMA_URL   = "http://mindai_ollama:11434"
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:0.5b")
 
 
 # ΓöÇΓöÇ The mind receives the founder's words ΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇΓöÇ
@@ -119,11 +119,24 @@ async def _run_harvester() -> None:
 
                 for key in new_keys:
                     try:
+                        # Skip internal synthesis/auto-index markers — not real knowledge to display
+                        if (key.startswith("corpus:auto:") or
+                                key.startswith("synthesis:") or
+                                key.startswith("corpus:auto")):
+                            await r.sadd(HARVESTED_KEY, key)
+                            continue
+
                         entry = json.loads(corpus[key])
                         content = entry.get("content", "") or entry.get("text", "")
                         source  = entry.get("source", "")
+                        title   = entry.get("title", "") or entry.get("name", "")
 
                         if not content.strip():
+                            await r.sadd(HARVESTED_KEY, key)
+                            continue
+
+                        # Skip entries whose content is just an internal key path (no real text)
+                        if content.strip().startswith("corpus:") or content.strip().startswith("synthesis:"):
                             await r.sadd(HARVESTED_KEY, key)
                             continue
 
@@ -141,18 +154,22 @@ async def _run_harvester() -> None:
                         # Mark as harvested
                         await r.sadd(HARVESTED_KEY, key)
 
-                        # Publish ENGINE_EXTERNALIZE → VR spawns a node
-                        await bus.publish(YEvent(
-                            event_type=YEventType.ENGINE_EXTERNALIZE,
-                            source_service="guidance_spawn",
-                            payload={
-                                "candidate_mind_name": source[:40] or key[:40],
-                                "source": source[:100],
-                                "summary": content[:120],
-                            }
-                        ))
+                        # Only publish ENGINE_EXTERNALIZE for named/sourced knowledge
+                        # (not bulk auto-index entries) so the VR world shows real nodes
+                        display_name = title or source or key
+                        is_meaningful = bool(title or (source and not source.startswith("corpus:")))
+                        if is_meaningful:
+                            await bus.publish(YEvent(
+                                event_type=YEventType.ENGINE_EXTERNALIZE,
+                                source_service="guidance_spawn",
+                                payload={
+                                    "candidate_mind_name": display_name[:40],
+                                    "source": source[:100],
+                                    "summary": content[:120],
+                                }
+                            ))
 
-                        log.info("[HARVESTER] mind:knowledge ← %s", source[:60] or key[:40])
+                        log.info("[HARVESTER] mind:knowledge ← %s", display_name[:60])
 
                     except Exception as exc:
                         log.warning("[HARVESTER] failed on key %s: %s", key, exc)
